@@ -28,6 +28,7 @@ export function useGamepad(callbacks) {
       const gp = gamepads[0];
       
       if (gp) {
+        try {
         const isPressed = (btnIndex) => gp.buttons[btnIndex]?.pressed;
 
         const checkButton = (btnIndex, name, callbackName) => {
@@ -65,6 +66,10 @@ export function useGamepad(callbacks) {
 
         if (xAxis > deadzone && !lastState.current['right_stick']) { lastState.current['right_stick'] = true; if(callbacksRef.current.onRight) callbacksRef.current.onRight(); }
         else if (xAxis <= deadzone) lastState.current['right_stick'] = false;
+        
+        } catch (err) {
+             console.error("Gamepad Polling Error: ", err);
+        }
       }
       requestRef.current = requestAnimationFrame(pollGamepads);
     };

@@ -66,11 +66,12 @@ app.put('/api/games/:id', async (req, res) => {
     const game = data.games.find(g => g.id === req.params.id);
     if (!game) return res.status(404).json({ error: 'Game not found' });
 
-    const { name, coverUrl, heroUrl, groupId, path: reqPath, exe } = req.body;
+    const { name, coverUrl, heroUrl, groupId, path: reqPath, exe, sgdbQuery } = req.body;
     if (name) game.name = name;
     if (groupId !== undefined) game.groupId = groupId;
     if (reqPath) game.path = reqPath;
     if (exe) game.exe = exe;
+    if (sgdbQuery !== undefined) game.sgdbQuery = sgdbQuery;
     if (coverUrl) {
         const localCover = await downloadCover(coverUrl);
         if (localCover) game.cover = localCover;

@@ -27,7 +27,13 @@ function findExeRecursive(dirPath, depth = 0) {
                 exes = exes.concat(findExeRecursive(fullPath, depth + 1));
             } else if (item.isFile() && item.name.toLowerCase().endsWith('.exe')) {
                 const low = item.name.toLowerCase();
-                if (!low.includes('unins') && !low.includes('crash') && !low.includes('redist') && !low.includes('setup') && !low.includes('dxwebsetup')) {
+                const db = require('./database');
+                const uiConfig = db.getDb().uiConfig || {};
+                const ignoredStr = uiConfig.ignoredExes || 'unins, crash, redist, setup, dxwebsetup';
+                const ignoredList = ignoredStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+                
+                const isIgnored = ignoredList.some(ign => low.includes(ign));
+                if (!isIgnored) {
                     exes.push({ dir: dirPath, file: item.name });
                 }
             }

@@ -49,6 +49,7 @@ function App() {
   const [editGroupId, setEditGroupId] = useState('null');
   const [editPath, setEditPath] = useState('');
   const [editExe, setEditExe] = useState('');
+  const [editSgdbQuery, setEditSgdbQuery] = useState('');
   
   // Crop state
   const [cropTarget, setCropTarget] = useState(null); // { dataUrl, type: 'cover' | 'hero' }
@@ -287,12 +288,13 @@ function App() {
     setEditGroupId(game.groupId || 'null');
     setEditPath(game.path || '');
     setEditExe(game.exe || '');
+    setEditSgdbQuery(game.sgdbQuery || '');
   };
 
   const saveEdits = async () => {
     try {
       const gId = editGroupId === 'null' ? null : editGroupId;
-      await axios.put(`${API_BASE}/games/${selectedGame.id}`, { name: editName, groupId: gId, path: editPath, exe: editExe });
+      await axios.put(`${API_BASE}/games/${selectedGame.id}`, { name: editName, groupId: gId, path: editPath, exe: editExe, sgdbQuery: editSgdbQuery });
       showToast("Güncellendi!");
       setEditMode(false);
       const gamesRes = await axios.get(`${API_BASE}/games`);
@@ -354,14 +356,15 @@ function App() {
       setCropTarget(null);
   };
 
-  const handleSgdbSearch = async () => {
+  const handleSgdbSearch = async (overrideQuery) => {
+      const query = typeof overrideQuery === 'string' ? overrideQuery : sgdbSearch;
       if(!uiConfig?.steamGridApiKey) {
           showToast("Önce ayarlardan API Anahtarı girin!");
           return;
       }
       setSgdbLoading(true);
       try {
-          const res = await axios.get(`${API_BASE}/steamgrid/search?q=${encodeURIComponent(sgdbSearch)}`);
+          const res = await axios.get(`${API_BASE}/steamgrid/search?q=${encodeURIComponent(query)}`);
           setSgdbResults(res.data);
           setSgdbImages(null);
       } catch (e) { showToast("Arama hatası."); }
@@ -388,7 +391,7 @@ function App() {
           const updatedGame = gamesRes.data.find(g => g.id === selectedGame.id);
           if(updatedGame) setSelectedGame(updatedGame);
       } catch (e) { showToast("İndirme hatası."); }
-      finally { setSgdbLoading(false); setShowSgdb(false); }
+      finally { setSgdbLoading(false); }
   };
 
   const hasOpenModal = () => selectedGame || showSettings || showFolderPicker || showSgdb || cropTarget;
@@ -507,10 +510,10 @@ function App() {
   };
 
   const getFocusedCover = () => {
-      if (filteredGames.length > 0 && focusedIndex >= 0) {
+      if (filteredGames.length > 0 && focusedIndex >= 0 && focusedIndex < filteredGames.length) {
           const game = filteredGames[focusedIndex];
-          if (game.hero) return `url('${COVERS_BASE}/${game.hero}?t=${Date.now()}')`;
-          if (game.cover) return `url('${COVERS_BASE}/${game.cover}?t=${Date.now()}')`;
+          if (game && game.hero) return `url('${COVERS_BASE}/${game.hero}?t=${Date.now()}')`;
+          if (game && game.cover) return `url('${COVERS_BASE}/${game.cover}?t=${Date.now()}')`;
       }
       return 'none';
   };
@@ -781,6 +784,19 @@ function App() {
                            </div>
                        </div>
                        
+                       {/* Excluded EXEs Section */}
+                       <div>
+                           <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Yoksayılan EXE Dosyaları</h4>
+                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Oyun taranırken bu kelimeleri içinde barındıran çöplük EXE dosyaları dahil edilmez. Virgülle ayırın.</p>
+                           <input 
+                              type="text" 
+                              placeholder="unins, crash, setup, crs-handler..." 
+                              value={uiConfig.ignoredExes || 'unins, crash, redist, setup, dxwebsetup'} 
+                              onChange={e => handleConfigChange('ignoredExes', e.target.value)} 
+                              style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontFamily:'monospace' }} 
+                           />
+                       </div>
+
                        {/* Scan Paths */}
                        <div>
                            <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Kayıtlı Tarama Yolları</h4>
@@ -833,9 +849,6 @@ function App() {
 
                                {/* duplicate path inputs removed */}
                                 
-                                <button className="btn" style={{ background: 'rgba(107, 76, 255, 0.2)', color: '#fff', border: '1px solid rgba(107, 76, 255, 0.5)', padding: '12px', borderRadius: '8px', width: '100%', marginTop: '8px' }} onClick={() => { setSgdbSearch(editName); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); }}>
-                                    <Search size={18} /> SteamGridDB Otomatik Kapak ve Arka Plan Ara
-                                </button>
 
                                 <div style={{ display: 'flex', flexDirection:'column', gap:'8px', marginTop: '16px', background: 'rgba(0,0,0,0.2)', padding:'12px', borderRadius:'8px' }}>
                                    <div style={{ display: 'flex', gap: '8px', alignItems:'center' }}>
@@ -872,7 +885,22 @@ function App() {
                                      </div>
                                 </div>
 
-                                <div style={{ display:'flex', gap:'12px', marginTop:'24px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px', background: 'rgba(107, 76, 255, 0.1)', padding:'12px', borderRadius:'8px', border: '1px solid rgba(107, 76, 255, 0.3)' }}>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input 
+                                           value={editSgdbQuery} 
+                                           onChange={e => setEditSgdbQuery(e.target.value)} 
+                                           onKeyDown={e => e.key === 'Enter' && (() => { const q = editSgdbQuery.trim() || editName || (editExe ? editExe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); })()}
+                                           placeholder={editName || (editExe ? editExe.replace('.exe', '') : '')}
+                                           style={{ flex: 1, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '13px' }} 
+                                        />
+                                        <button className="btn" style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', whiteSpace: 'nowrap' }} onClick={() => { const q = editSgdbQuery.trim() || editName || (editExe ? editExe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); }}>
+                                            <Search size={16} style={{marginRight:'4px'}} /> Çevrimiçi Kapak Ara
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display:'flex', gap:'12px', marginTop:'24px', flexShrink: 0 }}>
                                      <button className="btn btn-primary" onClick={saveEdits} style={{ flex: 1 }}><Check size={18} /> Değişiklikleri Kaydet</button>
                                      <button className="btn" onClick={() => setEditMode(false)}>İptal</button>
                                 </div>
@@ -893,7 +921,7 @@ function App() {
                                     <button className="btn btn-primary" style={{ flex: 1, fontSize: '18px', padding: '16px' }} onClick={() => playLocalGame(selectedGame.id)}>
                                         <Play fill="currentColor" size={24} /> OYNA
                                     </button>
-                                    <button className="btn" style={{ background: 'rgba(107, 76, 255, 0.3)', color: '#fff', border: '1px solid rgba(107, 76, 255, 0.5)' }} onClick={() => { setSgdbSearch(selectedGame.name); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); }}><Search size={18} /> Web'den<br/>Kapak Seç</button>
+                                    <button className="btn" style={{ background: 'rgba(107, 76, 255, 0.3)', color: '#fff', border: '1px solid rgba(107, 76, 255, 0.5)' }} onClick={() => { const q = selectedGame.sgdbQuery || selectedGame.name || (selectedGame.exe ? selectedGame.exe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); }}><Search size={18} /> Web'den<br/>Kapak Seç</button>
                                     <button className="btn" onClick={() => deleteGame(selectedGame.id)}>Kaldır</button>
                                </div>
                            </>
