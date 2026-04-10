@@ -3,7 +3,7 @@ title WBGL
 color 0b
 echo =========================================
 echo    WebBasedGamingLibrary Baslatiliyor
-echo    
+
 echo =========================================
 echo.
 echo Sunucular baslatiliyor...
