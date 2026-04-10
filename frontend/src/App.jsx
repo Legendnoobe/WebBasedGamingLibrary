@@ -64,10 +64,12 @@ function App() {
   const containerRef = useRef(null);
   const sidebarRef = useRef(null);
 
-  const filteredGames = games.filter(g => 
-      g.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      (activeGroupId === null ? true : (activeGroupId === 'uncategorized' ? !g.groupId : g.groupId === activeGroupId))
-  );
+  const filteredGames = games
+    .filter(g => 
+        g.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        (activeGroupId === null ? true : (activeGroupId === 'uncategorized' ? !g.groupId : g.groupId === activeGroupId))
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const applyUiConfig = (cfg) => {
       if(!cfg) return;
