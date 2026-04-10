@@ -567,7 +567,17 @@ function App() {
 
       {/* Main Content */}
       <div className="main-content" style={{ display: layout === 'ps' ? 'flex' : 'block', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          background: 'rgba(0, 0, 0, 0.3)',
+          padding: '16px 24px',
+          margin: '-32px -32px 32px -32px',
+          backdropFilter: 'blur(10px)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+          zIndex: 10
+        }}>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '8px' }} title="Kategoriler (LB)">
