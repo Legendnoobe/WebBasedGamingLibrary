@@ -122,15 +122,28 @@ export default function App() {
         if (!cfg) return;
         const root = document.documentElement;
         const set = (k, v) => { if (v !== undefined) root.style.setProperty(k, v); };
-        set('--bg-dark', cfg.bgDark);
-        set('--bg-card', cfg.bgCard);
-        set('--bg-card-hover', cfg.bgCardHover);
-        set('--text-main', cfg.textMain);
-        set('--text-muted', cfg.textMuted);
-        set('--accent', cfg.accent);
+
+        // Core color tokens
+        set('--bg-dark',      cfg.bgDark);
+        set('--bg-card',      cfg.bgCard);
+        set('--bg-card-hover',cfg.bgCardHover);
+        set('--text-main',    cfg.textMain);
+        set('--text-muted',   cfg.textMuted);
+        set('--accent',       cfg.accent);
         set('--accent-hover', cfg.accentHover);
-        set('--play-btn', cfg.playBtnColor);
+        set('--play-btn',     cfg.playBtnColor);
+        set('--danger',       cfg.danger);
         if (cfg.playBtnOpacity !== undefined) set('--play-btn-opacity', cfg.playBtnOpacity);
+
+        // Surface/panel tokens (light vs dark themes)
+        set('--bg-panel',        cfg.bgPanel);
+        set('--bg-surface',      cfg.bgSurface);
+        set('--bg-input',        cfg.bgInput);
+        set('--border-subtle',   cfg.borderSubtle);
+        set('--border-base',     cfg.borderBase);
+        set('--overlay-bg',      cfg.overlayBg);
+        set('--scrollbar-thumb', cfg.scrollbarThumb);
+
         if (cfg.fontFamily) document.body.style.fontFamily = `'${cfg.fontFamily}', -apple-system, sans-serif`;
         if (cfg.layout) setLayout(cfg.layout);
     }, []);

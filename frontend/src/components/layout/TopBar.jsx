@@ -38,7 +38,7 @@ export default function TopBar({
         <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             background: 'rgba(0,0,0,0.35)', padding: '14px 24px',
-            margin: '-32px -32px 32px -32px',
+            margin: '0 -32px 32px -32px',
             backdropFilter: 'blur(14px)',
             borderBottom: '1px solid rgba(255,255,255,0.06)',
             zIndex: 10, position: 'sticky', top: 0,

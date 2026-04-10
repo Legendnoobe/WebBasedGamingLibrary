@@ -1,5 +1,28 @@
 // ─── Preset theme definitions — single source of truth ───────────────────────
-// Dark themes: 6  |  Light themes: 3  |  Total: 9
+// Dark themes: 9  |  Light themes: 3  |  Total: 12
+
+// Shared dark surface tokens
+const DARK_SURFACE = {
+    bgPanel:      'rgba(0, 0, 0, 0.42)',
+    bgSurface:    'rgba(18, 20, 30, 0.82)',
+    bgInput:      'rgba(255, 255, 255, 0.06)',
+    borderSubtle: 'rgba(255, 255, 255, 0.06)',
+    borderBase:   'rgba(255, 255, 255, 0.10)',
+    overlayBg:    'rgba(0, 0, 0, 0.72)',
+    scrollbarThumb: 'rgba(255,255,255,0.12)',
+};
+
+// Shared light surface tokens
+const LIGHT_SURFACE = {
+    bgPanel:      'rgba(255, 255, 255, 0.88)',
+    bgSurface:    'rgba(248, 248, 252, 0.94)',
+    bgInput:      'rgba(0, 0, 0, 0.06)',
+    borderSubtle: 'rgba(0, 0, 0, 0.08)',
+    borderBase:   'rgba(0, 0, 0, 0.14)',
+    overlayBg:    'rgba(0, 0, 0, 0.50)',
+    scrollbarThumb: 'rgba(0,0,0,0.18)',
+};
+
 export const THEMES = [
     // ── Koyu Temalar ─────────────────────────────────────────────────────────
     {
@@ -12,7 +35,7 @@ export const THEMES = [
             textMain: '#f5f5f7', textMuted: '#a1a3af',
             accent: '#6b4cff', accentHover: '#8266ff',
             danger: '#ff4757', playBtnColor: '#6b4cff', playBtnOpacity: 0.75,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -25,7 +48,7 @@ export const THEMES = [
             textMain: '#e8f4fd', textMuted: '#90b8d4',
             accent: '#0098d4', accentHover: '#00b4d8',
             danger: '#ef233c', playBtnColor: '#0098d4', playBtnOpacity: 0.8,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -38,7 +61,7 @@ export const THEMES = [
             textMain: '#ffe8e8', textMuted: '#c49a9a',
             accent: '#c1121f', accentHover: '#e85d04',
             danger: '#ff6b35', playBtnColor: '#c1121f', playBtnOpacity: 0.8,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -51,7 +74,7 @@ export const THEMES = [
             textMain: '#e8faf0', textMuted: '#7fb899',
             accent: '#2d6a4f', accentHover: '#52b788',
             danger: '#e63946', playBtnColor: '#2d6a4f', playBtnOpacity: 0.8,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -64,7 +87,7 @@ export const THEMES = [
             textMain: '#fff8e7', textMuted: '#c8a96e',
             accent: '#d4a017', accentHover: '#f4a261',
             danger: '#d62828', playBtnColor: '#d4a017', playBtnOpacity: 0.8,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -77,7 +100,7 @@ export const THEMES = [
             textMain: '#ffffff', textMuted: '#888888',
             accent: '#cccccc', accentHover: '#ffffff',
             danger: '#ff3333', playBtnColor: '#cccccc', playBtnOpacity: 0.8,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...DARK_SURFACE,
         },
     },
     {
@@ -90,7 +113,7 @@ export const THEMES = [
             textMain: '#e0e0ff', textMuted: '#8890cc',
             accent: '#4f52d4', accentHover: '#6366f1',
             danger: '#f43f5e', playBtnColor: '#4f52d4', playBtnOpacity: 0.82,
-            fontFamily: 'Outfit',
+            fontFamily: 'Outfit', ...DARK_SURFACE,
         },
     },
     {
@@ -103,7 +126,7 @@ export const THEMES = [
             textMain: '#f0e8ff', textMuted: '#a070cc',
             accent: '#ff2d9b', accentHover: '#ff60b8',
             danger: '#ff4d4d', playBtnColor: '#ff2d9b', playBtnOpacity: 0.85,
-            fontFamily: 'Space Grotesk',
+            fontFamily: 'Space Grotesk', ...DARK_SURFACE,
         },
     },
     {
@@ -116,7 +139,7 @@ export const THEMES = [
             textMain: '#e0ffff', textMuted: '#5fa8a8',
             accent: '#0f766e', accentHover: '#14b8a6',
             danger: '#fb923c', playBtnColor: '#0f766e', playBtnOpacity: 0.82,
-            fontFamily: 'Roboto',
+            fontFamily: 'Roboto', ...DARK_SURFACE,
         },
     },
 
@@ -128,11 +151,11 @@ export const THEMES = [
         preview: ['#f0f2f5', '#4f46e5', '#818cf8'],
         light: true,
         values: {
-            bgDark: '#f0f2f5', bgCard: 'rgba(255, 255, 255, 0.75)', bgCardHover: 'rgba(228, 230, 240, 0.9)',
+            bgDark: '#f0f2f5', bgCard: 'rgba(255, 255, 255, 0.78)', bgCardHover: 'rgba(228, 230, 240, 0.92)',
             textMain: '#1e1e2e', textMuted: '#6b7280',
             accent: '#4f46e5', accentHover: '#6366f1',
             danger: '#dc2626', playBtnColor: '#4f46e5', playBtnOpacity: 0.85,
-            fontFamily: 'Inter',
+            fontFamily: 'Inter', ...LIGHT_SURFACE,
         },
     },
     {
@@ -142,11 +165,14 @@ export const THEMES = [
         preview: ['#fdf2f8', '#db2777', '#f472b6'],
         light: true,
         values: {
-            bgDark: '#fdf2f8', bgCard: 'rgba(255, 240, 248, 0.8)', bgCardHover: 'rgba(252, 220, 238, 0.95)',
+            bgDark: '#fdf2f8', bgCard: 'rgba(255, 240, 248, 0.82)', bgCardHover: 'rgba(252, 220, 238, 0.96)',
             textMain: '#1a0010', textMuted: '#9d174d',
             accent: '#db2777', accentHover: '#f472b6',
             danger: '#b91c1c', playBtnColor: '#db2777', playBtnOpacity: 0.85,
             fontFamily: 'Nunito',
+            ...LIGHT_SURFACE,
+            bgPanel:   'rgba(255, 240, 248, 0.92)',
+            bgSurface: 'rgba(253, 242, 248, 0.96)',
         },
     },
     {
@@ -156,11 +182,14 @@ export const THEMES = [
         preview: ['#f0faf4', '#059669', '#34d399'],
         light: true,
         values: {
-            bgDark: '#f0faf4', bgCard: 'rgba(240, 255, 248, 0.8)', bgCardHover: 'rgba(209, 250, 229, 0.95)',
+            bgDark: '#f0faf4', bgCard: 'rgba(240, 255, 248, 0.82)', bgCardHover: 'rgba(209, 250, 229, 0.96)',
             textMain: '#052e16', textMuted: '#065f46',
             accent: '#059669', accentHover: '#34d399',
             danger: '#dc2626', playBtnColor: '#059669', playBtnOpacity: 0.85,
             fontFamily: 'Poppins',
+            ...LIGHT_SURFACE,
+            bgPanel:   'rgba(240, 255, 248, 0.92)',
+            bgSurface: 'rgba(248, 255, 251, 0.96)',
         },
     },
 ];
