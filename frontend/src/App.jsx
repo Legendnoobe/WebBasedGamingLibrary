@@ -78,6 +78,7 @@ function App() {
       if(cfg.textMuted) root.style.setProperty('--text-muted', cfg.textMuted);
       if(cfg.accent) root.style.setProperty('--accent', cfg.accent);
       if(cfg.accentHover) root.style.setProperty('--accent-hover', cfg.accentHover);
+      if(cfg.playBtnColor) root.style.setProperty('--play-btn', cfg.playBtnColor);
       if(cfg.fontFamily) document.body.style.fontFamily = `'${cfg.fontFamily}', -apple-system, BlinkMacSystemFont, sans-serif`;
       
       if(cfg.layout) {
@@ -780,14 +781,14 @@ function App() {
                        <div>
                            <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Temalar ve Renkler</h4>
                            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-                               {Object.keys(uiConfig).filter(k => k !== 'lastPickerPath' && k !== 'layout' && k !== 'steamGridApiKey').map(key => (
+                               {Object.keys(uiConfig).filter(k => k !== 'lastPickerPath' && k !== 'layout' && k !== 'steamGridApiKey' && k !== 'ignoredExes').map(key => (
                                    <div key={key} style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                                       <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{key}</label>
+                                       <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{key === 'playBtnColor' ? 'Oyna Butonu Rengi' : key}</label>
                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                           {key.startsWith('bg') || key.startsWith('accent') || key === 'danger' ? (
-                                               <input type="color" value={uiConfig[key].length === 7 ? uiConfig[key] : '#ffffff'} onChange={e => handleConfigChange(key, e.target.value)} style={{ padding: '0', width: '32px', height: '32px', border: 'none', background: 'transparent', cursor: 'pointer' }} />
+                                           {key.startsWith('bg') || key.startsWith('accent') || key === 'danger' || key.toLowerCase().includes('play') ? (
+                                               <input type="color" value={uiConfig[key].startsWith('rgba') ? '#6b4cff' : (uiConfig[key].length === 7 ? uiConfig[key] : '#ffffff')} onChange={e => handleConfigChange(key, e.target.value)} style={{ padding: '0', width: '32px', height: '32px', border: 'none', background: 'transparent', cursor: 'pointer' }} />
                                            ) : null}
-                                           <input value={uiConfig[key]} onChange={e => handleConfigChange(key, e.target.value)} style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px' }} />
+                                           <input value={uiConfig[key]} onChange={e => handleConfigChange(key, e.target.value)} style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px' }} placeholder="HEX veya RGBA..." />
                                        </div>
                                    </div>
                                ))}
@@ -928,7 +929,7 @@ function App() {
                                    <p><strong>Kayıt:</strong> {new Date(selectedGame.addedAt).toLocaleString()}</p>
                                </div>
                                <div style={{ marginTop: 'auto', display: 'flex', gap: '16px' }}>
-                                    <button className="btn btn-primary" style={{ flex: 1, fontSize: '18px', padding: '16px' }} onClick={() => playLocalGame(selectedGame.id)}>
+                                    <button className="btn btn-play" style={{ flex: 1, fontSize: '18px', padding: '16px' }} onClick={() => playLocalGame(selectedGame.id)}>
                                         <Play fill="currentColor" size={24} /> OYNA
                                     </button>
                                     <button className="btn" style={{ background: 'rgba(107, 76, 255, 0.3)', color: '#fff', border: '1px solid rgba(107, 76, 255, 0.5)' }} onClick={() => { const q = selectedGame.sgdbQuery || selectedGame.name || (selectedGame.exe ? selectedGame.exe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); }}><Search size={18} /> Web'den<br/>Kapak Seç</button>

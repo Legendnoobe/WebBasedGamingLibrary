@@ -22,7 +22,8 @@ let data = {
         accent: '#6b4cff',
         accentHover: '#8266ff',
         fontFamily: 'Inter',
-        danger: '#ff4757'
+        danger: '#ff4757',
+        playBtnColor: 'rgba(107, 76, 255, 0.8)'
     }
 };
 
@@ -30,7 +31,16 @@ let data = {
 if (fs.existsSync(dbPath)) {
     try {
         const raw = fs.readFileSync(dbPath, 'utf-8');
-        data = JSON.parse(raw);
+        const loaded = JSON.parse(raw);
+        // Merge loaded data with default structure to ensure new fields are added
+        data = {
+            ...data,
+            ...loaded,
+            uiConfig: {
+                ...data.uiConfig,
+                ...(loaded.uiConfig || {})
+            }
+        };
     } catch (e) {
         console.error("Error reading db.json, starting fresh.");
     }
