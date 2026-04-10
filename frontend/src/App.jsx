@@ -1,1068 +1,661 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Gamepad2, FolderPlus, Play, Search, Edit3, Check, X, LayoutGrid, List, Maximize, Minimize, Settings, ChevronLeft, Folder, RefreshCw, File, MonitorPlay, Image as ImageIcon, ImagePlus } from 'lucide-react';
-import axios from 'axios';
-import { useGamepad } from './useGamepad';
-import { ImageCropper } from './ImageCropper';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useGamepad } from './hooks/useGamepad.js';
+import { ImageCropper } from './ImageCropper.jsx';
+import { useLocale } from './i18n/LocaleContext.jsx';
 
-const API_BASE = 'http://localhost:3001/api';
-const COVERS_BASE = 'http://localhost:3001/covers';
+import TopBar, { SORT_KEY_LIST } from './components/layout/TopBar.jsx';
+import Sidebar from './components/layout/Sidebar.jsx';
+import GameGrid from './components/game/GameGrid.jsx';
+import GameModal from './components/game/GameModal.jsx';
+import SettingsModal from './components/settings/SettingsModal.jsx';
+import FolderPicker from './components/pickers/FolderPicker.jsx';
+import SgdbModal from './components/sgdb/SgdbModal.jsx';
 
-function App() {
-  const [games, setGames] = useState([]);
-  const [selectedGame, setSelectedGame] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState('');
-  
-  const [isScanning, setIsScanning] = useState(false);
-  const [isRescanning, setIsRescanning] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+import {
+    fetchGames, addGame, updateGame, deleteGame as apiDeleteGame, launchGame as apiLaunchGame,
+    uploadCover, uploadHero,
+    fetchConfig, saveConfig as apiSaveConfig,
+    fetchGroups, createGroup as apiCreateGroup, deleteGroup as apiDeleteGroup,
+    fetchScanFolders, removeScanFolder as apiRemoveScanFolder,
+    scanFolder as apiScanFolder, rescanAll as apiRescanAll,
+    fetchDrives, fetchDirectory,
+    sgdbSearch, sgdbGetGame, sgdbApply,
+    COVERS_BASE,
+} from './api/api.js';
 
-  // View state
-  const [layout, setLayout] = useState('grid'); // 'grid' | 'wide' | 'ps'
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  
-  // Settings modal
-  const [showSettings, setShowSettings] = useState(false);
-  const [uiConfig, setUiConfig] = useState(null);
-  const [scanFolders, setScanFolders] = useState([]);
-
-  // Sidebar / Group State
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [groups, setGroups] = useState([]);
-  const [activeGroupId, setActiveGroupId] = useState(null); // null = All Games
-  const [sidebarFocusIndex, setSidebarFocusIndex] = useState(0);
-
-  // Folder/File Picker modal
-  const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [pickerMode, setPickerMode] = useState('folder');
-  const [drives, setDrives] = useState([]);
-  const [currentPath, setCurrentPath] = useState('');
-  const [folders, setFolders] = useState([]);
-  const [files, setFiles] = useState([]);
-
-  // Gamepad focus state
-  const [focusedIndex, setFocusedIndex] = useState(0);
-
-  // Edit Mode state
-  const [editMode, setEditMode] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editGroupId, setEditGroupId] = useState('null');
-  const [editPath, setEditPath] = useState('');
-  const [editExe, setEditExe] = useState('');
-  const [editSgdbQuery, setEditSgdbQuery] = useState('');
-  
-  // Crop state
-  const [cropTarget, setCropTarget] = useState(null); // { dataUrl, type: 'cover' | 'hero' }
-
-  // SGDB State
-  const [showSgdb, setShowSgdb] = useState(false);
-  const [sgdbSearch, setSgdbSearch] = useState('');
-  const [sgdbResults, setSgdbResults] = useState([]);
-  const [sgdbImages, setSgdbImages] = useState(null); // { grids:[], heroes:[] }
-  const [sgdbLoading, setSgdbLoading] = useState(false);
-
-  const containerRef = useRef(null);
-  const sidebarRef = useRef(null);
-
-  const filteredGames = games
-    .filter(g => 
-        g.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        (activeGroupId === null ? true : (activeGroupId === 'uncategorized' ? !g.groupId : g.groupId === activeGroupId))
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const applyUiConfig = (cfg) => {
-      if(!cfg) return;
-      const root = document.documentElement;
-      if(cfg.bgDark) root.style.setProperty('--bg-dark', cfg.bgDark);
-      if(cfg.bgCard) root.style.setProperty('--bg-card', cfg.bgCard);
-      if(cfg.bgCardHover) root.style.setProperty('--bg-card-hover', cfg.bgCardHover);
-      if(cfg.textMain) root.style.setProperty('--text-main', cfg.textMain);
-      if(cfg.textMuted) root.style.setProperty('--text-muted', cfg.textMuted);
-      if(cfg.accent) root.style.setProperty('--accent', cfg.accent);
-      if(cfg.accentHover) root.style.setProperty('--accent-hover', cfg.accentHover);
-      if(cfg.playBtnColor) root.style.setProperty('--play-btn', cfg.playBtnColor);
-      if(cfg.playBtnOpacity !== undefined) root.style.setProperty('--play-btn-opacity', cfg.playBtnOpacity);
-      if(cfg.fontFamily) document.body.style.fontFamily = `'${cfg.fontFamily}', -apple-system, BlinkMacSystemFont, sans-serif`;
-      
-      if(cfg.layout) {
-          setLayout(cfg.layout);
-      }
-  };
-
-  const loadInitialData = async () => {
-    try {
-      setLoading(true);
-      const [gamesRes, configRes, groupsRes] = await Promise.all([
-         axios.get(`${API_BASE}/games`),
-         axios.get(`${API_BASE}/config`),
-         axios.get(`${API_BASE}/groups`)
-      ]);
-      setGames(gamesRes.data || []);
-      setUiConfig(configRes.data);
-      setGroups(groupsRes.data || []);
-      applyUiConfig(configRes.data);
-    } catch (e) {
-      console.error(e);
-      showToast("Sunucu kapalı.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const saveConfig = async () => {
-      try {
-          showToast("Ayarlar kaydediliyor...");
-          const res = await axios.put(`${API_BASE}/config`, uiConfig);
-          applyUiConfig(res.data);
-          setShowSettings(false);
-          showToast("Kaydedildi!");
-      } catch (e) {
-          showToast("Hata!");
-      }
-  };
-
-  const handleConfigChange = (key, value) => {
-      setUiConfig(prev => ({...prev, [key]: value}));
-  };
-
-  useEffect(() => {
-    loadInitialData();
-    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
-  };
-
-  const openSettings = async () => {
-      setShowSettings(true);
-      try {
-          const res = await axios.get(`${API_BASE}/scan-folders`);
-          setScanFolders(res.data);
-      } catch(e) {}
-  };
-
-  const removeScanFolder = async (folderPath) => {
-      try {
-          const res = await axios.delete(`${API_BASE}/scan-folders`, { data: { folderPath } });
-          setScanFolders(res.data.folders);
-          showToast("Klasör izlemeden çıkarıldı!");
-      } catch(e) {}
-  };
-
-  const openFolderPicker = async (mode = 'folder') => {
-      setPickerMode(mode);
-      setShowFolderPicker(true);
-      try {
-          const res = await axios.get(`${API_BASE}/drives`);
-          if (res.data.length > 0) {
-              setDrives(res.data);
-              const targetPath = (uiConfig && uiConfig.lastPickerPath) ? uiConfig.lastPickerPath : res.data[0];
-              loadDirectory(targetPath, mode);
-          }
-      } catch (e) {
-          showToast("Sürücüler alınamadı.");
-      }
-  };
-
-  const loadDirectory = async (pathStr, modeOverride = pickerMode) => {
-      setCurrentPath(pathStr);
-      try {
-          const res = await axios.get(`${API_BASE}/directory?path=${encodeURIComponent(pathStr)}&files=${modeOverride === 'file'}`);
-          setFolders(res.data.folders || []);
-          setFiles(res.data.files || []);
-      } catch (e) {
-          showToast("Erişim engellendi.");
-          setFolders([]);
-          setFiles([]);
-      }
-  };
-
-  const navigateUp = () => {
-      const parts = currentPath.split('\\').filter(Boolean);
-      if (parts.length <= 1) {
-          loadDirectory(parts[0] + '\\');
-      } else {
-          parts.pop();
-          loadDirectory(parts.join('\\') + '\\');
-      }
-  };
-
-  const handleConfirmFolder = async () => {
-      if (pickerMode === 'file') {
-          showToast("Lütfen klasör içindeki EXE dosyasına tıklayın!");
-          return;
-      }
-      setShowFolderPicker(false);
-      
-      // Save last path globally
-      if (uiConfig) {
-          const newCfg = { ...uiConfig, lastPickerPath: currentPath };
-          setUiConfig(newCfg);
-          axios.put(`${API_BASE}/config`, newCfg).catch(()=>{});
-      }
-      
-      handleScanPath(currentPath);
-  };
-
-  const handleFileSelect = async (fileName) => {
-      setShowFolderPicker(false);
-      
-      // Save last path globally
-      if (uiConfig) {
-          const newCfg = { ...uiConfig, lastPickerPath: currentPath };
-          setUiConfig(newCfg);
-          axios.put(`${API_BASE}/config`, newCfg).catch(()=>{});
-      }
-
-      let cleanName = fileName.replace('.exe', '').replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
-      const gameName = prompt("Oyun ismi ne olsun?", cleanName);
-      if (!gameName) return;
-
-      try {
-          showToast("Oyun ekleniyor...");
-          await axios.post(`${API_BASE}/games`, { name: gameName, path: currentPath, exe: fileName });
-          showToast("Oyun eklendi!");
-          const gamesRes = await axios.get(`${API_BASE}/games`);
-          setGames(gamesRes.data);
-      } catch(e) {
-          showToast("Eklerken hata oluştu!");
-      }
-  };
-
-  const handleScanPath = async (folderPath) => {
-    setIsScanning(true);
-    try {
-      showToast("Taranıyor: " + folderPath);
-      const res = await axios.post(`${API_BASE}/scan`, { folderPath });
-      showToast(`${res.data.added} oyun eklendi!`);
-      const gamesRes = await axios.get(`${API_BASE}/games`);
-      setGames(gamesRes.data);
-    } catch (e) {
-      showToast("Tarama hatası!");
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
-  const handleRescanAll = async () => {
-    setIsRescanning(true);
-    try {
-      showToast("Tüm klasörler taranıyor...");
-      const res = await axios.post(`${API_BASE}/rescan-all`);
-      showToast(`${res.data.added} eksik oyunlar eklendi!`);
-      const gamesRes = await axios.get(`${API_BASE}/games`);
-      setGames(gamesRes.data);
-    } catch (e) {
-      showToast("Yeniden tarama hatası!");
-    } finally {
-      setIsRescanning(false);
-    }
-  };
-
-  const playLocalGame = async (id) => {
-    try {
-      showToast("Oyun açılıyor...");
-      await axios.post(`${API_BASE}/games/${id}/launch`);
-    } catch (e) {
-      showToast("Hata oluştu.");
-    }
-  };
-
-  const deleteGame = async (id) => {
-    if (!confirm("Kütüphaneden sil?")) return;
-    try {
-      await axios.delete(`${API_BASE}/games/${id}`);
-      setSelectedGame(null);
-      const res = await axios.get(`${API_BASE}/games`);
-      setGames(res.data);
-      showToast("Silindi.");
-    } catch(e) {
-       showToast("Hata.");
-    }
-  };
-
-  const openGameModal = (game) => {
-    setSelectedGame(game);
-    setEditMode(false);
-    setEditName(game.name);
-    setEditGroupId(game.groupId || 'null');
-    setEditPath(game.path || '');
-    setEditExe(game.exe || '');
-    setEditSgdbQuery(game.sgdbQuery || '');
-  };
-
-  const saveEdits = async () => {
-    try {
-      const gId = editGroupId === 'null' ? null : editGroupId;
-      await axios.put(`${API_BASE}/games/${selectedGame.id}`, { name: editName, groupId: gId, path: editPath, exe: editExe, sgdbQuery: editSgdbQuery });
-      showToast("Güncellendi!");
-      setEditMode(false);
-      const gamesRes = await axios.get(`${API_BASE}/games`);
-      setGames(gamesRes.data);
-      const updatedGame = gamesRes.data.find(g => g.id === selectedGame.id);
-      if(updatedGame) setSelectedGame(updatedGame);
-    } catch (e) {}
-  };
-
-  const addGroup = async () => {
-      const name = prompt("Yeni Kategori/Grup İsmi:");
-      if (!name) return;
-      try {
-          const res = await axios.post(`${API_BASE}/groups`, { name });
-          setGroups([...groups, res.data]);
-          showToast("Grup oluşturuldu!");
-      } catch(e) {}
-  };
-
-  const deleteGroup = async (id) => {
-      if(!confirm("Kategoriyi sil? İçerisindeki oyunlar Tüm Oyunlar'a düşecektir.")) return;
-      try {
-          await axios.delete(`${API_BASE}/groups/${id}`);
-          if (activeGroupId === id) setActiveGroupId(null);
-          setGroups(groups.filter(g => g.id !== id));
-          const gamesRes = await axios.get(`${API_BASE}/games`);
-          setGames(gamesRes.data);
-      } catch(e){}
-  };
-
-  const handleImageFileSelect = (e, type) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-          setCropTarget({ dataUrl: reader.result, type });
-      };
-      reader.readAsDataURL(file);
-      e.target.value = null; // reset input
-  };
-
-  const handleCropDone = async (blob) => {
-      if (!cropTarget || !selectedGame) return;
-      
-      const formData = new FormData();
-      formData.append(cropTarget.type, blob, 'upload.jpg');
-
-      try {
-          showToast("Yüklendi ve Kaydediliyor...");
-          await axios.post(`${API_BASE}/games/${selectedGame.id}/${cropTarget.type}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-          showToast("Görsel değiştirildi!");
-          const gamesRes = await axios.get(`${API_BASE}/games`);
-          setGames(gamesRes.data);
-          const updatedGame = gamesRes.data.find(g => g.id === selectedGame.id);
-          if (updatedGame) setSelectedGame(updatedGame);
-      } catch (err) {
-          showToast("Resim yüklenemedi!");
-      }
-      setCropTarget(null);
-  };
-
-  const handleSgdbSearch = async (overrideQuery) => {
-      const query = typeof overrideQuery === 'string' ? overrideQuery : sgdbSearch;
-      if(!uiConfig?.steamGridApiKey) {
-          showToast("Önce ayarlardan API Anahtarı girin!");
-          return;
-      }
-      setSgdbLoading(true);
-      try {
-          const res = await axios.get(`${API_BASE}/steamgrid/search?q=${encodeURIComponent(query)}`);
-          setSgdbResults(res.data);
-          setSgdbImages(null);
-      } catch (e) { showToast("Arama hatası."); }
-      finally { setSgdbLoading(false); }
-  };
-
-  const handleSgdbSelectGame = async (gameId) => {
-      setSgdbLoading(true);
-      try {
-          const res = await axios.get(`${API_BASE}/steamgrid/game/${gameId}`);
-          setSgdbImages(res.data);
-      } catch (e) { showToast("Görseller alınamadı."); }
-      finally { setSgdbLoading(false); }
-  };
-
-  const handleSgdbApply = async (url, type) => {
-      setSgdbLoading(true);
-      showToast("İndiriliyor...");
-      try {
-          const res = await axios.post(`${API_BASE}/steamgrid/apply`, { gameId: selectedGame.id, type, url });
-          showToast("Uygulandı!");
-          const gamesRes = await axios.get(`${API_BASE}/games`);
-          setGames(gamesRes.data);
-          const updatedGame = gamesRes.data.find(g => g.id === selectedGame.id);
-          if(updatedGame) setSelectedGame(updatedGame);
-      } catch (e) { showToast("İndirme hatası."); }
-      finally { setSgdbLoading(false); }
-  };
-
-  const hasOpenModal = () => selectedGame || showSettings || showFolderPicker || showSgdb || cropTarget;
-
-  const handleModalDirection = (direction) => {
-      const overlays = document.querySelectorAll('.modal-overlay');
-      if (overlays.length === 0) return;
-      const activeOverlay = overlays[overlays.length - 1]; // top overlay
-      
-      const elements = Array.from(activeOverlay.querySelectorAll('button, input, select, [tabindex="0"]'))
-                          .filter(el => !el.disabled && el.offsetParent !== null && window.getComputedStyle(el).display !== 'none');
-      if (elements.length === 0) return;
-      
-      let currentIndex = elements.indexOf(document.activeElement);
-      if (currentIndex === -1) currentIndex = 0;
-      else {
-          currentIndex += direction;
-          if (currentIndex >= elements.length) currentIndex = 0;
-          if (currentIndex < 0) currentIndex = elements.length - 1;
-      }
-      elements[currentIndex].focus();
-  };
-
-  useGamepad({
-    onUp: () => {
-      if (hasOpenModal()) { handleModalDirection(-1); return; }
-      if (isSidebarOpen) {
-          setSidebarFocusIndex(prev => (prev > 0 ? prev - 1 : 0));
-          return;
-      }
-      setFocusedIndex(prev => {
-         if (layout === 'ps') return prev; // Up doesn't scroll horizontally
-         const itemsPerRow = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth / 224) || 1 : 1;
-         const next = prev - itemsPerRow;
-         return next >= 0 ? next : prev;
-      });
-    },
-    onDown: () => {
-      if (hasOpenModal()) { handleModalDirection(1); return; }
-      if (isSidebarOpen) {
-          setSidebarFocusIndex(prev => (prev < groups.length + 1 ? prev + 1 : prev));
-          return;
-      }
-      setFocusedIndex(prev => {
-         if (layout === 'ps') return prev; 
-         const itemsPerRow = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth / 224) || 1 : 1;
-         const next = prev + itemsPerRow;
-         return next < filteredGames.length ? next : prev;
-      });
-    },
-    onLeft: () => {
-      if (hasOpenModal()) { handleModalDirection(-1); return; }
-      if (layout === 'wide' || isSidebarOpen) return;
-      setFocusedIndex(prev => (prev > 0 ? prev - 1 : 0));
-    },
-    onRight: () => {
-      if (hasOpenModal()) { handleModalDirection(1); return; }
-      if (layout === 'wide' || isSidebarOpen) return;
-      setFocusedIndex(prev => (prev < filteredGames.length - 1 ? prev + 1 : prev));
-    },
-    onLB: () => {
-        if (hasOpenModal()) return;
-        setIsSidebarOpen(!isSidebarOpen);
-        setSidebarFocusIndex(0);
-    },
-    onSelect: () => { // 'A' button
-      if (hasOpenModal()) {
-          const el = document.activeElement;
-          if (el && typeof el.click === 'function') {
-              if (el.tagName === 'INPUT') return; // let them clear or type
-              el.click(); 
-          }
-          return;
-      }
-      if (isSidebarOpen) {
-          if (sidebarFocusIndex === 0) setActiveGroupId(null);
-          else if (sidebarFocusIndex === 1) setActiveGroupId('uncategorized');
-          else setActiveGroupId(groups[sidebarFocusIndex - 2].id);
-          setIsSidebarOpen(false);
-          setFocusedIndex(0);
-          return;
-      }
-      if (selectedGame && !editMode) {
-          playLocalGame(selectedGame.id);
-      } else if (!selectedGame && focusedIndex >= 0 && focusedIndex < filteredGames.length) {
-          playLocalGame(filteredGames[focusedIndex].id); // Quick play
-      }
-    },
-    onOptions: () => { // 'Y' button
-      if (hasOpenModal() || isSidebarOpen) return;
-      if (focusedIndex >= 0 && focusedIndex < filteredGames.length) {
-          openGameModal(filteredGames[focusedIndex]); // Open settings
-      }
-    },
-    onBack: () => { // 'B' button
-      if (cropTarget) setCropTarget(null);
-      else if (showSgdb) setShowSgdb(false);
-      else if (selectedGame) { if (editMode) setEditMode(false); else setSelectedGame(null); } 
-      else if (showSettings) setShowSettings(false);
-      else if (showFolderPicker) setShowFolderPicker(false);
-      else if (isSidebarOpen) setIsSidebarOpen(false);
-    }
-  });
-
-  useEffect(() => {
-     if (focusedIndex >= 0 && containerRef.current) {
-        const children = containerRef.current.children;
-        if (children[focusedIndex]) {
-            children[focusedIndex].scrollIntoView({ behavior: 'smooth', block: layout === 'ps' ? 'center' : 'nearest', inline: layout === 'ps' ? 'center' : 'nearest' });
+// ─── Sorting helper ───────────────────────────────────────────────────────────
+let _randomSeed = Math.random();
+function applySorting(games, sortKey, groups) {
+    const copy = [...games];
+    switch (sortKey) {
+        case 'name_asc':    return copy.sort((a, b) => a.name.localeCompare(b.name));
+        case 'name_desc':   return copy.sort((a, b) => b.name.localeCompare(a.name));
+        case 'last_played': return copy.sort((a, b) => {
+            if (!a.lastPlayed && !b.lastPlayed) return 0;
+            if (!a.lastPlayed) return 1;
+            if (!b.lastPlayed) return -1;
+            return new Date(b.lastPlayed) - new Date(a.lastPlayed);
+        });
+        case 'added_new': return copy.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+        case 'added_old': return copy.sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt));
+        case 'group': return copy.sort((a, b) => {
+            const ga = groups.find(g => g.id === a.groupId)?.name || 'zzz';
+            const gb = groups.find(g => g.id === b.groupId)?.name || 'zzz';
+            return ga.localeCompare(gb);
+        });
+        case 'random': {
+            // Seeded shuffle so it doesn't change every render
+            const seeded = copy.map((v, i) => ({ v, r: Math.abs(Math.sin(_randomSeed + i)) }));
+            return seeded.sort((a, b) => a.r - b.r).map(x => x.v);
         }
-     }
-  }, [focusedIndex, layout]);
-
-  useEffect(() => {
-     if (isSidebarOpen && sidebarFocusIndex >= 0 && sidebarRef.current) {
-         const children = sidebarRef.current.children;
-         if (children[sidebarFocusIndex]) {
-             children[sidebarFocusIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-         }
-     }
-  }, [sidebarFocusIndex, isSidebarOpen]);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(err => {});
-    else if (document.exitFullscreen) document.exitFullscreen();
-  };
-
-  const getFocusedCover = () => {
-      if (filteredGames.length > 0 && focusedIndex >= 0 && focusedIndex < filteredGames.length) {
-          const game = filteredGames[focusedIndex];
-          if (game && game.hero) return `url('${COVERS_BASE}/${game.hero}?t=${Date.now()}')`;
-          if (game && game.cover) return `url('${COVERS_BASE}/${game.cover}?t=${Date.now()}')`;
-      }
-      return 'none';
-  };
-
-  return (
-    <div className="app-container">
-      
-      {layout === 'ps' && (
-          <div className="hero-background" style={{ backgroundImage: getFocusedCover() }}></div>
-      )}
-
-      {/* Collapsible Sidebar Overlay */}
-      <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
-
-      {/* Collapsible Sidebar */}
-      <div className={`collapsible-sidebar glass ${isSidebarOpen ? 'open' : ''}`}>
-         <div className="brand" style={{ marginBottom: '32px' }}>
-            <Gamepad2 size={28} color="var(--accent)" fill="var(--accent)"/>
-            <span>Kategoriler</span>
-         </div>
-         
-         <div ref={sidebarRef} style={{ flex: 1, overflowY: 'auto' }}>
-            <div 
-               className={`sidebar-group-item ${activeGroupId === null ? 'active' : ''} ${sidebarFocusIndex === 0 && isSidebarOpen ? 'focused' : ''}`} 
-               onClick={() => { setActiveGroupId(null); setIsSidebarOpen(false); }}
-            >
-               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                   <Gamepad2 size={18} /> Tüm Oyunlar
-               </div>
-               <span style={{ fontSize:'12px', background:'rgba(255,255,255,0.1)', padding:'2px 8px', borderRadius:'12px' }}>{games.length}</span>
-            </div>
-
-            <div 
-               className={`sidebar-group-item ${activeGroupId === 'uncategorized' ? 'active' : ''} ${sidebarFocusIndex === 1 && isSidebarOpen ? 'focused' : ''}`} 
-               onClick={() => { setActiveGroupId('uncategorized'); setIsSidebarOpen(false); }}
-            >
-               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                   <Folder size={18} style={{ opacity: 0.5 }} /> Sınıflandırılmamış
-               </div>
-               <span style={{ fontSize:'12px', background:'rgba(255,255,255,0.1)', padding:'2px 8px', borderRadius:'12px' }}>{games.filter(g => !g.groupId).length}</span>
-            </div>
-
-            <div style={{ padding: '0 12px', margin: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}></div>
-
-            {groups.map((g, idx) => (
-                <div 
-                   key={g.id} 
-                   className={`sidebar-group-item ${activeGroupId === g.id ? 'active' : ''} ${sidebarFocusIndex === idx + 2 && isSidebarOpen ? 'focused' : ''}`} 
-                   onClick={() => { setActiveGroupId(g.id); setIsSidebarOpen(false); }}
-                >
-                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                       <Folder size={18} /> {g.name}
-                   </div>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize:'12px', background:'rgba(255,255,255,0.1)', padding:'2px 8px', borderRadius:'12px' }}>{games.filter(game => game.groupId === g.id).length}</span>
-                      <button className="btn" style={{ padding: '4px', background: 'transparent', border:'none', visibility: activeGroupId === g.id ? 'visible' : 'hidden' }} onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}><X size={14} color="#ff4757"/></button>
-                   </div>
-                </div>
-            ))}
-         </div>
-
-         <button className="btn" style={{ marginTop: '16px', background: 'rgba(255,255,255,0.05)' }} onClick={addGroup}>
-            + Yeni Kategori
-         </button>
-      </div>
-
-      {/* Main Content */}
-      <div className="main-content" style={{ display: layout === 'ps' ? 'flex' : 'block', flexDirection: 'column' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          background: 'rgba(0, 0, 0, 0.3)',
-          padding: '16px 24px',
-          margin: '-32px -32px 32px -32px',
-          backdropFilter: 'blur(10px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-          zIndex: 10
-        }}>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <button className="btn" onClick={() => setIsSidebarOpen(true)} style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '8px' }} title="Kategoriler (LB)">
-                    <LayoutGrid size={18} />
-                </button>
-                <h2 style={{ margin:0, marginRight: '8px' }}>Kütüphanen</h2>
-                
-                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '4px' }}>
-                    <button className="btn" onClick={() => openFolderPicker('folder')} disabled={isScanning} style={{ padding: '6px 12px', background: 'transparent', border: 'none', fontSize: '13px' }}>
-                        <FolderPlus size={16} /> {isScanning ? 'Taranıyor...' : 'Yol Seç'}
-                    </button>
-                    <div style={{ width: '1px', background: 'rgba(255,255,255,0.1)', margin: '4px' }}></div>
-                    <button className="btn" onClick={() => openFolderPicker('file')} style={{ padding: '6px 12px', background: 'transparent', border: 'none', fontSize: '13px' }}>
-                        <File size={16} /> Manuel Ekle
-                    </button>
-                </div>
-            </div>
-            <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <button className="btn" style={{ padding: '8px', border: 'none' }} onClick={handleRescanAll} disabled={isRescanning} title="Klasörleri Yeniden Tara">
-                    <RefreshCw size={18} className={isRescanning ? "spinning" : ""} />
-                </button>
-                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', padding: '4px' }}>
-                     <button className="btn" style={{ padding: '6px', background: layout === 'grid' ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none' }} onClick={() => { setLayout('grid'); if(uiConfig){ const cfg = {...uiConfig, layout:'grid'}; setUiConfig(cfg); axios.put(`${API_BASE}/config`, cfg).catch(()=>{}); } }} title="Izgara"><LayoutGrid size={18} /></button>
-                     <button className="btn" style={{ padding: '6px', background: layout === 'wide' ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none' }} onClick={() => { setLayout('wide'); if(uiConfig){ const cfg = {...uiConfig, layout:'wide'}; setUiConfig(cfg); axios.put(`${API_BASE}/config`, cfg).catch(()=>{}); } }} title="Liste"><List size={18} /></button>
-                     <button className="btn" style={{ padding: '6px', background: layout === 'ps' ? 'rgba(255,255,255,0.1)' : 'transparent', border: 'none' }} onClick={() => { setLayout('ps'); if(uiConfig){ const cfg = {...uiConfig, layout:'ps'}; setUiConfig(cfg); axios.put(`${API_BASE}/config`, cfg).catch(()=>{}); } }} title="Konsol Görünümü"><MonitorPlay size={18} /></button>
-                </div>
-                
-                <button className="btn" style={{ padding: '8px', border: 'none' }} onClick={toggleFullscreen} title="Tam Ekran">
-                    {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
-                </button>
-                
-                <button className="btn" style={{ padding: '8px', border: 'none' }} onClick={openSettings} title="Ayarlar">
-                    <Settings size={18} />
-                </button>
-
-                <div style={{ position:'relative' }}>
-                    <Search size={18} style={{position:'absolute', left:'12px', top:'10px', color:'var(--text-muted)'}}/>
-                    <input 
-                      type="text" 
-                      placeholder="Ara..." 
-                      style={{ paddingLeft: '40px', width: '220px' }} 
-                      value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
-                    />
-                </div>
-            </div>
-        </div>
-
-        {filteredGames.length === 0 && !loading ? (
-           <div className="empty-state">
-              <Gamepad2 />
-              <h3>Kütüphane Boş</h3>
-              <p style={{ color: 'var(--text-muted)' }}>Sol taraftan bir klasör seçerek oyun ekleyin.</p>
-           </div>
-        ) : (
-            <div className={`game-${layout === 'wide' ? 'layout-wide' : layout === 'ps' ? 'layout-ps' : 'grid'}`} ref={containerRef}>
-               {filteredGames.map((game, index) => (
-                   <div 
-                      key={game.id}
-                      className={`game-card ${focusedIndex === index ? 'focused' : ''}`} 
-                      onMouseEnter={() => setFocusedIndex(index)}
-                      onClick={() => openGameModal(game)} // Click Card -> Open Details/Gallery
-                      onContextMenu={(e) => { e.preventDefault(); openGameModal(game); }}
-                   >
-                       {game.cover ? (
-                           <img 
-                              src={`${COVERS_BASE}/${game.cover}?t=${Date.now()}`} 
-                              alt={game.name} 
-                              className="game-card-cover" 
-                           />
-                       ) : (
-                           <div className="fallback-cover">
-                               {game.name.charAt(0).toUpperCase()}
-                           </div>
-                       )}
-                       
-                       <div className="quick-play-overlay" onClick={(e) => { e.stopPropagation(); playLocalGame(game.id); }}>
-                           <Play fill="currentColor" size={48} />
-                       </div>
-
-                       <div className="game-card-overlay">
-                           <div className="game-title">{game.name}</div>
-                           <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginTop:'4px' }}>
-                               {game.lastPlayed ? `Son: ${new Date(game.lastPlayed).toLocaleDateString()}` : 'Yeni Eklendi'}
-                           </div>
-                       </div>
-                   </div>
-               ))}
-            </div>
-        )}
-        
-        {/* Gamepad Hints */}
-        {layout === 'ps' && filteredGames.length > 0 && (
-           <div style={{ marginTop: 'auto', display: 'flex', gap: '24px', justifyContent: 'center', opacity: 0.7, padding: '16px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ background: 'white', color: 'black', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>A</div> Oyna</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ background: 'white', color: 'black', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>Y</div> Detaylar / Düzenle</span>
-           </div>
-        )}
-
-      </div>
-
-      {/* --- CUSTOM FOLDER/FILE PICKER MODAL --- */}
-      {showFolderPicker && (
-         <div className="modal-overlay" onClick={() => setShowFolderPicker(false)}>
-              <div className="modal-content glass-panel" style={{ width: '600px', height: '65vh', padding: '0', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-                  
-                  <div style={{ padding: '24px', background: 'rgba(0,0,0,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h3 style={{ margin: 0 }}>Gezgin: {pickerMode === 'folder' ? 'Hedef Klasörü Seçin' : 'Oyun (EXE) Dosyasını Seçin'}</h3>
-                      <button className="modal-close" style={{ position: 'relative', top: 0, right: 0 }} onClick={() => setShowFolderPicker(false)}><X size={20} /></button>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
-                      <select 
-                         value={currentPath.split('\\')[0] + '\\'} 
-                         onChange={(e) => loadDirectory(e.target.value)} 
-                         style={{ background: 'var(--bg-card)', color: '#fff', border:'none', padding: '8px', borderRadius: '4px', outline: 'none' }}
-                      >
-                          {drives.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                      
-                      <button className="btn" style={{ padding: '8px' }} onClick={navigateUp}>
-                          <ChevronLeft size={16} /> Bir Üst
-                      </button>
-
-                      <div style={{ flex: 1, padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px', display: 'flex', alignItems: 'center' }}>
-                          {currentPath}
-                      </div>
-                  </div>
-
-                  <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {/* Sub Folders */}
-                      {folders.map(f => (
-                          <div 
-                             key={'dir_'+f}
-                             onClick={() => loadDirectory(currentPath + (currentPath.endsWith('\\') ? '' : '\\') + f)}
-                             style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '8px', cursor: 'pointer', alignItems: 'center', transition: 'background 0.2s' }}
-                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                          >
-                             <Folder size={18} color="var(--accent)" fill="var(--accent)" />
-                             <span style={{ fontSize: '14px' }}>{f}</span>
-                          </div>
-                      ))}
-                      
-                      {/* Exe Files (if manual mode) */}
-                      {pickerMode === 'file' && files.map(file => (
-                          <div 
-                             key={'file_'+file}
-                             onClick={() => handleFileSelect(file)}
-                             style={{ display: 'flex', gap: '12px', padding: '12px', borderRadius: '8px', cursor: 'pointer', alignItems: 'center', transition: 'background 0.2s', background: 'rgba(255,255,255,0.02)' }}
-                             onMouseEnter={e => e.currentTarget.style.background = 'rgba(107, 76, 255, 0.15)'}
-                             onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                          >
-                             <File size={18} color="#a1a3af" />
-                             <span style={{ fontSize: '14px', color: '#fff' }}>{file}</span>
-                          </div>
-                      ))}
-                      
-                      {(folders.length === 0 && files.length === 0) && (
-                          <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '40px' }}>Bu klasör boş</div>
-                      )}
-                  </div>
-
-                  {pickerMode === 'folder' && (
-                      <div style={{ padding: '24px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.2)' }}>
-                          <button className="btn btn-primary" onClick={handleConfirmFolder}>
-                              <Check size={18} /> Bu Klasörü Seç
-                          </button>
-                      </div>
-                  )}
-              </div>
-         </div>
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && uiConfig && (
-          <div className="modal-overlay" onClick={() => setShowSettings(false)} style={{ zIndex: 100 }}>
-              <div className="modal-content glass-panel" style={{ width: '600px', height: '80vh', padding: '32px', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', marginBottom: '24px' }}>
-                       <h2>Ayarlar</h2>
-                       <button className="modal-close" style={{ position:'static' }} onClick={() => setShowSettings(false)}><X size={20} /></button>
-                   </div>
-                   
-                   <div style={{ flex: 1, overflowY: 'auto', paddingRight: '12px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                       
-                       {/* SGDB API Key */}
-                       <div>
-                           <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>SteamGridDB Bağlantısı</h4>
-                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Oyun görsellerini internetten çekebilmek için API Anahtarı girin.</p>
-                           <input 
-                              type="text" 
-                              placeholder="Bearer Token (API Key)..." 
-                              value={uiConfig.steamGridApiKey || ''} 
-                              onChange={e => handleConfigChange('steamGridApiKey', e.target.value)} 
-                              style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontFamily:'monospace' }} 
-                           />
-                       </div>
-
-                       {/* Themes Section */}
-                       <div>
-                           <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Temalar ve Renkler</h4>
-                           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-                               {Object.keys(uiConfig).filter(k => k !== 'lastPickerPath' && k !== 'layout' && k !== 'steamGridApiKey' && k !== 'ignoredExes').map(key => (
-                                   <div key={key} style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                                       <label style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                                           {key === 'playBtnColor' ? 'Play Button Color' : key === 'playBtnOpacity' ? 'Opacity' : key}
-                                       </label>
-                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                           {key.toLowerCase().includes('color') || key.startsWith('bg') || key.startsWith('accent') || key === 'danger' ? (
-                                               <>
-                                                   <input type="color" value={uiConfig[key].startsWith('rgba') ? '#6b4cff' : (uiConfig[key].length === 7 ? uiConfig[key] : '#ffffff')} onChange={e => handleConfigChange(key, e.target.value)} style={{ padding: '0', width: '32px', height: '32px', border: 'none', background: 'transparent', cursor: 'pointer' }} />
-                                                   <input value={uiConfig[key]} onChange={e => handleConfigChange(key, e.target.value)} style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px' }} placeholder="HEX veya RGBA..." />
-                                               </>
-                                           ) : key.toLowerCase().includes('opacity') ? (
-                                               <>
-                                                   <input type="range" min="0" max="1" step="0.05" value={uiConfig[key]} onChange={e => handleConfigChange(key, parseFloat(e.target.value))} style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', accentColor: 'var(--accent)' }} />
-                                                   <span style={{ fontSize: '12px', minWidth: '40px', textAlign: 'right' }}>{Math.round(uiConfig[key] * 100)}%</span>
-                                               </>
-                                           ) : (
-                                               <input value={uiConfig[key]} onChange={e => handleConfigChange(key, e.target.value)} style={{ flex: 1, fontFamily: 'monospace', fontSize: '12px' }} />
-                                           )}
-                                       </div>
-                                   </div>
-                               ))}
-                           </div>
-                       </div>
-                       
-                       {/* Excluded EXEs Section */}
-                       <div>
-                           <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Yoksayılan EXE Dosyaları</h4>
-                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Oyun taranırken bu kelimeleri içinde barındıran çöplük EXE dosyaları dahil edilmez. Virgülle ayırın.</p>
-                           <input 
-                              type="text" 
-                              placeholder="unins, crash, setup, crs-handler..." 
-                              value={uiConfig.ignoredExes || 'unins, crash, redist, setup, dxwebsetup'} 
-                              onChange={e => handleConfigChange('ignoredExes', e.target.value)} 
-                              style={{ width: '100%', padding: '12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontFamily:'monospace' }} 
-                           />
-                       </div>
-
-                       {/* Scan Paths */}
-                       <div>
-                           <h4 style={{ color: 'var(--accent)', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>Kayıtlı Tarama Yolları</h4>
-                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>Aşağıdaki klasörler, 'Yeniden Tara' butonuna basıldığında baştan sona otomatik indekslenir.</p>
-                           {scanFolders.length === 0 ? (
-                               <div style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>İzlenen klasör yok.</div>
-                           ) : (
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                   {scanFolders.map(path => (
-                                       <div key={path} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '8px' }}>
-                                           <span style={{ fontSize: '13px', fontFamily: 'monospace' }}>{path}</span>
-                                           <button className="btn" style={{ padding: '6px 12px', background: 'rgba(255,71,87,0.2)', color: '#ff4757', border: 'none' }} onClick={() => removeScanFolder(path)}><X size={14} /></button>
-                                       </div>
-                                   ))}
-                               </div>
-                           )}
-                       </div>
-                       
-                   </div>
-
-                   <button className="btn btn-primary" style={{ marginTop: '24px' }} onClick={saveConfig}><Check size={18} /> Ayarları Kaydet</button>
-              </div>
-          </div>
-      )}
-
-      {/* Game Modal */}
-      {selectedGame && (
-          <div className="modal-overlay" onClick={() => setSelectedGame(null)}>
-              <div className="modal-content glass-panel" onClick={e => e.stopPropagation()}>
-                  <button className="modal-close" onClick={() => setSelectedGame(null)}><X size={20} /></button>
-                  
-                  {selectedGame.cover ? (
-                      <img src={`${COVERS_BASE}/${selectedGame.cover}?t=${Date.now()}`} className="game-detail-cover" alt={selectedGame.name} style={{ objectFit: 'contain', background: '#000' }}/>
-                  ) : (
-                      <div className="fallback-cover" style={{ width: '35%', fontSize: '100px' }}>
-                          {selectedGame.name.charAt(0).toUpperCase()}
-                      </div>
-                  )}
-
-                  <div className="game-detail-info">
-                       {editMode ? (
-                           <div style={{ display: 'flex', flexDirection:'column', gap:'16px', paddingRight: '32px' }}>
-                               <div style={{ display: 'flex', gap: '16px' }}>
-                                   <input value={editName} onChange={e => setEditName(e.target.value)} style={{ flex: 1, fontSize: '24px', fontWeight: 'bold', padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }} placeholder="Oyun Adı" />
-                                   <select value={editGroupId} onChange={e => setEditGroupId(e.target.value)} style={{ padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }}>
-                                       <option value="null">Tüm Oyunlar (Kategori Yok)</option>
-                                       {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-                                   </select>
-                               </div>
-
-                               {/* duplicate path inputs removed */}
-                                
-
-                                <div style={{ display: 'flex', flexDirection:'column', gap:'8px', marginTop: '16px', background: 'rgba(0,0,0,0.2)', padding:'12px', borderRadius:'8px' }}>
-                                   <div style={{ display: 'flex', gap: '8px', alignItems:'center' }}>
-                                       <strong style={{ width: '60px', fontSize:'12px', color:'var(--text-muted)' }}>Oyun Yolu:</strong>
-                                       <input value={editPath} onChange={e => setEditPath(e.target.value)} style={{ flex: 1, padding: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', borderRadius: '4px', fontFamily:'monospace', fontSize:'12px' }} />
-                                   </div>
-                                   <div style={{ display: 'flex', gap: '8px', alignItems:'center' }}>
-                                       <strong style={{ width: '60px', fontSize:'12px', color:'var(--text-muted)' }}>Exe Dosya:</strong>
-                                       <input value={editExe} onChange={e => setEditExe(e.target.value)} style={{ flex: 1, padding: '8px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', borderRadius: '4px', fontFamily:'monospace', fontSize:'12px' }} />
-                                   </div>
-                                </div>
-                                
-                                <div style={{ display: 'grid', gridTemplateColumns:'1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                                     {/* Dikey Kapak Yukleme */}
-                                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px', display:'flex', flexDirection:'column', alignItems:'center', gap:'8px' }}>
-                                         <ImageIcon size={24} color="var(--text-muted)" />
-                                         <h4 style={{ margin:0, fontSize:'13px' }}>Kapak Resmi (Dikey)</h4>
-                                         <p style={{ fontSize:'11px', color:'var(--text-muted)', textAlign:'center', margin:0 }}>Kart ve Izgara Görünümü</p>
-                                         <label className="btn" style={{ marginTop:'auto', cursor:'pointer', width:'100%' }}>
-                                             <span>Manuel Seç (Yerel)</span>
-                                             <input type="file" accept="image/*" onChange={(e) => handleImageFileSelect(e, 'cover')} style={{ display: 'none' }} />
-                                         </label>
-                                     </div>
-
-                                     {/* Yatay Arka Plan Yukleme */}
-                                     <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px', display:'flex', flexDirection:'column', alignItems:'center', gap:'8px' }}>
-                                         <ImagePlus size={24} color="var(--accent)" />
-                                         <h4 style={{ margin:0, fontSize:'13px', color:'var(--accent)' }}>Arka Plan (Yatay)</h4>
-                                         <p style={{ fontSize:'11px', color:'var(--text-muted)', textAlign:'center', margin:0 }}>Konsol Modu Duvar Kağıdı</p>
-                                         <label className="btn btn-primary" style={{ marginTop:'auto', cursor:'pointer', width:'100%' }}>
-                                             <span>Manuel Seç (Yerel)</span>
-                                             <input type="file" accept="image/*" onChange={(e) => handleImageFileSelect(e, 'hero')} style={{ display: 'none' }} />
-                                         </label>
-                                     </div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px', background: 'rgba(107, 76, 255, 0.1)', padding:'12px', borderRadius:'8px', border: '1px solid rgba(107, 76, 255, 0.3)' }}>
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                        <input 
-                                           value={editSgdbQuery} 
-                                           onChange={e => setEditSgdbQuery(e.target.value)} 
-                                           onKeyDown={e => e.key === 'Enter' && (() => { const q = editSgdbQuery.trim() || editName || (editExe ? editExe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); })()}
-                                           placeholder={editName || (editExe ? editExe.replace('.exe', '') : '')}
-                                           style={{ flex: 1, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '13px' }} 
-                                        />
-                                        <button className="btn" style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', whiteSpace: 'nowrap' }} onClick={() => { const q = editSgdbQuery.trim() || editName || (editExe ? editExe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); }}>
-                                            <Search size={16} style={{marginRight:'4px'}} /> Çevrimiçi Kapak Ara
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div style={{ display:'flex', gap:'12px', marginTop:'24px', flexShrink: 0 }}>
-                                     <button className="btn btn-primary" onClick={saveEdits} style={{ flex: 1 }}><Check size={18} /> Değişiklikleri Kaydet</button>
-                                     <button className="btn" onClick={() => setEditMode(false)}>İptal</button>
-                                </div>
-                           </div>
-                       ) : (
-                           <>
-                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'flex-start' }}>
-                                   <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>{selectedGame.name}</h1>
-                                   <button className="btn" style={{ padding: '8px', marginRight: '32px' }} onClick={() => setEditMode(true)} title="Düzenle"><Edit3 size={18} /></button>
-                               </div>
-                               <div style={{ color: 'var(--text-muted)', fontSize:'14px', marginBottom: '40px', lineHeight:'1.5', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px', marginTop: '16px' }}>
-                                   <p><strong>Yol:</strong> {selectedGame.path}</p>
-                                   <p><strong>Dosya:</strong> {selectedGame.exe}</p>
-                                   <p><strong>Grup:</strong> {selectedGame.groupId ? (groups.find(g => g.id === selectedGame.groupId)?.name || 'Bilinmiyor') : 'Kategorisiz'}</p>
-                                   <p><strong>Kayıt:</strong> {new Date(selectedGame.addedAt).toLocaleString()}</p>
-                               </div>
-                               <div style={{ marginTop: 'auto', display: 'flex', gap: '16px' }}>
-                                    <button className="btn btn-play" style={{ flex: 1, fontSize: '18px', padding: '16px' }} onClick={() => playLocalGame(selectedGame.id)}>
-                                        <Play fill="currentColor" size={24} /> OYNA
-                                    </button>
-                                    <button className="btn" style={{ background: 'rgba(107, 76, 255, 0.3)', color: '#fff', border: '1px solid rgba(107, 76, 255, 0.5)' }} onClick={() => { const q = selectedGame.sgdbQuery || selectedGame.name || (selectedGame.exe ? selectedGame.exe.replace('.exe', '') : ''); setSgdbSearch(q); setShowSgdb(true); setSgdbResults([]); setSgdbImages(null); handleSgdbSearch(q); }}><Search size={18} /> Web'den<br/>Kapak Seç</button>
-                                    <button className="btn" onClick={() => deleteGame(selectedGame.id)}>Kaldır</button>
-                               </div>
-                           </>
-                       )}
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {toast && <div className="toast">{toast}</div>}
-
-      {/* CROP MODAL */}
-      {cropTarget && (
-        <ImageCropper 
-           image={cropTarget.dataUrl} 
-           aspect={cropTarget.type === 'cover' ? 2/3 : 16/9} 
-           onCancel={() => setCropTarget(null)} 
-           onCropDone={handleCropDone} 
-        />
-      )}
-       {/* SGDB MODAL */}
-      {showSgdb && selectedGame && (
-         <div className="modal-overlay" onClick={() => setShowSgdb(false)} style={{ zIndex: 200 }}>
-              <div className="modal-content glass-panel" style={{ width: '800px', height: '80vh', display:'flex', flexDirection:'column', padding:'24px' }} onClick={e => e.stopPropagation()}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems:'center', marginBottom: '16px' }}>
-                       <h2>SteamGridDB - {selectedGame.name}</h2>
-                       <button className="modal-close" style={{ position:'static' }} onClick={() => setShowSgdb(false)}><X size={20} /></button>
-                  </div>
-                  
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                      <input 
-                         value={sgdbSearch} 
-                         onChange={e => setSgdbSearch(e.target.value)} 
-                         onKeyDown={e => e.key === 'Enter' && handleSgdbSearch()}
-                         style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff' }} 
-                         placeholder="Oyun ara..." 
-                      />
-                      <button className="btn btn-primary" onClick={handleSgdbSearch} disabled={sgdbLoading}><Search size={18}/> Ara</button>
-                  </div>
-
-                  <div style={{ flex: 1, overflowY: 'auto' }}>
-                      {sgdbLoading && <div style={{ textAlign: 'center', padding: '40px', color: 'var(--accent)' }}>Yükleniyor...</div>}
-                      
-                      {!sgdbImages && sgdbResults.map(game => (
-                          <div 
-                              key={game.id} 
-                              onClick={() => handleSgdbSelectGame(game.id)}
-                              tabIndex="0"
-                              onKeyDown={e => e.key === 'Enter' && handleSgdbSelectGame(game.id)}
-                              style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', marginBottom: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems:'center', gap:'12px' }}
-                          >
-                             {game.types && game.types[0] === 'game' ? <Gamepad2 size={16}/> : <Search size={16}/>}
-                             <span>{game.name}</span>
-                          </div>
-                      ))}
-
-                      {sgdbImages && (
-                          <div>
-                              <button className="btn" style={{ marginBottom: '16px' }} onClick={() => setSgdbImages(null)}><ChevronLeft size={16}/> Sonuçlara Dön</button>
-                              
-                              <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px' }}>Dikey Kapaklar (Grid)</h3>
-                              <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
-                                 {sgdbImages.grids.map(img => (
-                                     <div key={img.id} style={{ position: 'relative', cursor:'pointer', flex: '0 0 140px' }} onClick={() => handleSgdbApply(img.url, 'cover')} tabIndex="0" onKeyDown={e => e.key === 'Enter' && handleSgdbApply(img.url, 'cover')}>
-                                         <img src={img.thumb} style={{ width: '140px', height: '210px', borderRadius: '8px', objectFit:'cover', background:'rgba(0,0,0,0.5)' }} />
-                                         <div style={{ position:'absolute', bottom:0, background:'rgba(0,0,0,0.8)', width:'100%', padding:'4px', textAlign:'center', fontSize:'11px', borderBottomLeftRadius:'8px', borderBottomRightRadius:'8px', color: '#fff' }}>Dikey Kapak Yap</div>
-                                     </div>
-                                 ))}
-                                 {sgdbImages.grids.length === 0 && <div style={{ color:'var(--text-muted)' }}>Kapak bulunamadı.</div>}
-                              </div>
-
-                              <h3 style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginBottom: '8px' }}>Arka Planlar (Hero)</h3>
-                              <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-                                 {sgdbImages.heroes.map(img => (
-                                     <div key={img.id} style={{ position: 'relative', cursor:'pointer', flex: '0 0 280px' }} onClick={() => handleSgdbApply(img.url, 'hero')} tabIndex="0" onKeyDown={e => e.key === 'Enter' && handleSgdbApply(img.url, 'hero')}>
-                                         <img src={img.thumb} style={{ width: '280px', height: '157px', borderRadius: '8px', objectFit:'cover', background:'rgba(0,0,0,0.5)' }} />
-                                         <div style={{ position:'absolute', bottom:0, background:'rgba(0,0,0,0.8)', width:'100%', padding:'4px', textAlign:'center', fontSize:'11px', borderBottomLeftRadius:'8px', borderBottomRightRadius:'8px', color: '#fff' }}>Arka Plan Yap</div>
-                                     </div>
-                                 ))}
-                                 {sgdbImages.heroes.length === 0 && <div style={{ color:'var(--text-muted)' }}>Arka plan bulunamadı.</div>}
-                              </div>
-                          </div>
-                      )}
-                  </div>
-              </div>
-         </div>
-      )}
-
-    </div>
-  );
+        default: return copy.sort((a, b) => a.name.localeCompare(b.name));
+    }
 }
 
-export default App;
+// ─── App ──────────────────────────────────────────────────────────────────────
+export default function App() {
+    const { t } = useLocale();
+
+    // Core data
+    const [games, setGames] = useState([]);
+    const [groups, setGroups] = useState([]);
+    const [uiConfig, setUiConfig] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState('');
+
+    // UI state
+    const [layout, setLayout] = useState('grid');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortKey, setSortKey] = useState('name_asc');
+
+    // Sidebar
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [activeGroupId, setActiveGroupId] = useState(null);
+    const [sidebarFocusIndex, setSidebarFocusIndex] = useState(0);
+    const sidebarRef = useRef(null);
+
+    // Modals
+    const [selectedGame, setSelectedGame] = useState(null);
+    const [showSettings, setShowSettings] = useState(false);
+    const [settingsTab, setSettingsTab] = useState('appearance');
+    const [showFolderPicker, setShowFolderPicker] = useState(false);
+    const [showSgdb, setShowSgdb] = useState(false);
+    const [cropTarget, setCropTarget] = useState(null);
+
+    // Folder picker state
+    const [pickerMode, setPickerMode] = useState('folder');
+    const [drives, setDrives] = useState([]);
+    const [currentPath, setCurrentPath] = useState('');
+    const [folderList, setFolderList] = useState([]);
+    const [fileList, setFileList] = useState([]);
+    const [pickerFocusIndex, setPickerFocusIndex] = useState(-1);
+
+    // Settings
+    const [scanFolders, setScanFolders] = useState([]);
+
+    // Scan state
+    const [isScanning, setIsScanning] = useState(false);
+    const [isRescanning, setIsRescanning] = useState(false);
+
+    // Gamepad focus
+    const [focusedIndex, setFocusedIndex] = useState(0);
+    const containerRef = useRef(null);
+
+    // ── Derived: filtered + sorted game list ─────────────────────────────────
+    const filteredGames = React.useMemo(() => {
+        const filtered = games.filter(g =>
+            g.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+            (activeGroupId === null ? true : (activeGroupId === 'uncategorized' ? !g.groupId : g.groupId === activeGroupId))
+        );
+        return applySorting(filtered, sortKey, groups);
+    }, [games, searchQuery, activeGroupId, sortKey, groups]);
+
+    // ── Toast ────────────────────────────────────────────────────────────────
+    const showToast = useCallback((msg) => {
+        setToast(msg);
+        setTimeout(() => setToast(''), 3000);
+    }, []);
+
+    // ── CSS variable application ──────────────────────────────────────────────
+    const applyUiConfig = useCallback((cfg) => {
+        if (!cfg) return;
+        const root = document.documentElement;
+        const set = (k, v) => { if (v !== undefined) root.style.setProperty(k, v); };
+        set('--bg-dark', cfg.bgDark);
+        set('--bg-card', cfg.bgCard);
+        set('--bg-card-hover', cfg.bgCardHover);
+        set('--text-main', cfg.textMain);
+        set('--text-muted', cfg.textMuted);
+        set('--accent', cfg.accent);
+        set('--accent-hover', cfg.accentHover);
+        set('--play-btn', cfg.playBtnColor);
+        if (cfg.playBtnOpacity !== undefined) set('--play-btn-opacity', cfg.playBtnOpacity);
+        if (cfg.fontFamily) document.body.style.fontFamily = `'${cfg.fontFamily}', -apple-system, sans-serif`;
+        if (cfg.layout) setLayout(cfg.layout);
+    }, []);
+
+    // ── Initial load ──────────────────────────────────────────────────────────
+    useEffect(() => {
+        (async () => {
+            try {
+                const [g, cfg, gr] = await Promise.all([fetchGames(), fetchConfig(), fetchGroups()]);
+                setGames(g || []);
+                setUiConfig(cfg);
+                setGroups(gr || []);
+                applyUiConfig(cfg);
+                if (cfg.layout) setLayout(cfg.layout);
+            } catch {
+                showToast(t('toast.serverDown'));
+            } finally {
+                setLoading(false);
+            }
+        })();
+
+        const onFSChange = () => setIsFullscreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFSChange);
+
+        // GameCard hover events
+        const onGameHover = (e) => setFocusedIndex(e.detail.index);
+        document.addEventListener('gamehover', onGameHover);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', onFSChange);
+            document.removeEventListener('gamehover', onGameHover);
+        };
+    }, []);
+
+    // ── Game actions ──────────────────────────────────────────────────────────
+    const refreshGames = async () => {
+        const g = await fetchGames();
+        setGames(g || []);
+        return g;
+    };
+
+    const playGame = async (id) => {
+        showToast(t('toast.launching'));
+        try { await apiLaunchGame(id); } catch { showToast(t('toast.launchFail')); }
+    };
+
+    const removeGame = async (id) => {
+        if (!confirm(t('gameView.confirmRemove'))) return;
+        await apiDeleteGame(id);
+        setSelectedGame(null);
+        await refreshGames();
+        showToast(t('toast.removed'));
+    };
+
+    const saveGameEdits = async (gameId, payload) => {
+        await updateGame(gameId, payload);
+        showToast(t('toast.updated'));
+        const g = await refreshGames();
+        const updated = g.find(x => x.id === gameId);
+        if (updated) setSelectedGame(updated);
+    };
+
+    // ── Group actions ─────────────────────────────────────────────────────────
+    const addGroup = async () => {
+        const name = prompt(t('sidebar.newCategoryPrompt'));
+        if (!name) return;
+        const newGroup = await apiCreateGroup(name);
+        setGroups(prev => [...prev, newGroup]);
+        showToast(t('sidebar.categoryCreated'));
+    };
+
+    const removeGroup = async (id) => {
+        if (!confirm(t('sidebar.confirmDelete'))) return;
+        await apiDeleteGroup(id);
+        if (activeGroupId === id) setActiveGroupId(null);
+        setGroups(prev => prev.filter(g => g.id !== id));
+        await refreshGames();
+    };
+
+    // ── Settings actions ──────────────────────────────────────────────────────
+    const openSettings = async () => {
+        setShowSettings(true);
+        try {
+            const folders = await fetchScanFolders();
+            setScanFolders(folders);
+        } catch {}
+    };
+
+    const saveSettings = async () => {
+        try {
+            showToast(t('settings.saving'));
+            const saved = await apiSaveConfig(uiConfig);
+            applyUiConfig(saved);
+            setShowSettings(false);
+            showToast(t('settings.saved'));
+        } catch {
+            showToast(t('settings.saveError'));
+        }
+    };
+
+    const handleRemoveScanFolder = async (path) => {
+        const res = await apiRemoveScanFolder(path);
+        setScanFolders(res.folders || []);
+        showToast(t('scanning.folderRemoved'));
+    };
+
+    // ── Folder picker ─────────────────────────────────────────────────────────
+    const openFolderPicker = async (mode = 'folder') => {
+        setPickerMode(mode);
+        setPickerFocusIndex(-1);
+        setShowFolderPicker(true);
+        try {
+            const d = await fetchDrives();
+            setDrives(d);
+            const base = (uiConfig?.lastPickerPath) || d[0];
+            await loadDirectory(base, mode);
+        } catch {
+            showToast(t('picker.drivesError'));
+        }
+    };
+
+    const loadDirectory = async (pathStr, modeOverride = pickerMode) => {
+        setCurrentPath(pathStr);
+        setPickerFocusIndex(-1);
+        try {
+            const res = await fetchDirectory(pathStr, modeOverride === 'file');
+            setFolderList(res.folders || []);
+            setFileList(res.files || []);
+        } catch {
+            showToast(t('picker.accessDenied'));
+            setFolderList([]);
+            setFileList([]);
+        }
+    };
+
+    const navigateUp = () => {
+        const parts = currentPath.split('\\').filter(Boolean);
+        if (parts.length <= 1) loadDirectory(parts[0] + '\\');
+        else { parts.pop(); loadDirectory(parts.join('\\') + '\\'); }
+    };
+
+    const handleConfirmFolder = async () => {
+        setShowFolderPicker(false);
+        if (uiConfig) {
+            const newCfg = { ...uiConfig, lastPickerPath: currentPath };
+            setUiConfig(newCfg);
+            apiSaveConfig(newCfg).catch(() => {});
+        }
+        handleScanPath(currentPath);
+    };
+
+    const handleFileSelect = async (fileName) => {
+        setShowFolderPicker(false);
+        if (uiConfig) {
+            const newCfg = { ...uiConfig, lastPickerPath: currentPath };
+            setUiConfig(newCfg);
+            apiSaveConfig(newCfg).catch(() => {});
+        }
+        let cleanName = fileName.replace('.exe', '').replace(/[-_.]/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase();
+        const gameName = prompt(t('gameEdit.gameName') + ':', cleanName);
+        if (!gameName) return;
+        try {
+            showToast(t('toast.addingGame'));
+            await addGame({ name: gameName, path: currentPath, exe: fileName });
+            showToast(t('toast.gameAdded'));
+            await refreshGames();
+        } catch { showToast(t('toast.addError')); }
+    };
+
+    const handleScanPath = async (folderPath) => {
+        setIsScanning(true);
+        try {
+            showToast(t('toast.scanning') + folderPath);
+            const res = await apiScanFolder(folderPath);
+            showToast(res.added + t('toast.scanned'));
+            await refreshGames();
+        } catch { showToast(t('toast.scanError')); } finally { setIsScanning(false); }
+    };
+
+    const handleRescanAll = async () => {
+        setIsRescanning(true);
+        try {
+            showToast(t('toast.rescanning'));
+            const res = await apiRescanAll();
+            showToast(res.added + t('toast.rescanned'));
+            await refreshGames();
+        } catch { showToast(t('toast.rescanError')); } finally { setIsRescanning(false); }
+    };
+
+    // ── Image / Crop ──────────────────────────────────────────────────────────
+    const handleImageFileSelect = (e, type) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => setCropTarget({ dataUrl: reader.result, type });
+        reader.readAsDataURL(file);
+        e.target.value = null;
+    };
+
+    const handleCropDone = async (blob) => {
+        if (!cropTarget || !selectedGame) return;
+        const formData = new FormData();
+        formData.append(cropTarget.type, blob, 'upload.jpg');
+        try {
+            showToast(t('toast.loading'));
+            if (cropTarget.type === 'cover') await uploadCover(selectedGame.id, formData);
+            else await uploadHero(selectedGame.id, formData);
+            showToast(t('toast.uploaded'));
+            const g = await refreshGames();
+            const updated = g.find(x => x.id === selectedGame.id);
+            if (updated) setSelectedGame(updated);
+        } catch { showToast(t('toast.uploadFail')); }
+        setCropTarget(null);
+    };
+
+    // ── SGDB ─────────────────────────────────────────────────────────────────
+    const [sgdbLoading, setSgdbLoading] = useState(false);
+
+    const handleSgdbSearch = async (query) => {
+        if (!uiConfig?.steamGridApiKey) { showToast(t('sgdb.needApiKey')); return null; }
+        setSgdbLoading(true);
+        try { return await sgdbSearch(query); } catch { showToast(t('sgdb.searchError')); return null; } finally { setSgdbLoading(false); }
+    };
+
+    // Called by SgdbModal with two different signatures:
+    // (gameId, null, null)         → fetch images for game
+    // (null, 'cover'|'hero', url) → apply image
+    const handleSgdbAction = async (gameId, type, url) => {
+        setSgdbLoading(true);
+        try {
+            if (gameId && !type && !url) {
+                return await sgdbGetGame(gameId);
+            } else if (type && url && selectedGame) {
+                await sgdbApply(selectedGame.id, type, url);
+                showToast(t('toast.applied'));
+                const g = await refreshGames();
+                const updated = g.find(x => x.id === selectedGame.id);
+                if (updated) setSelectedGame(updated);
+            }
+        } catch { showToast(t('sgdb.applyError')); }
+        finally { setSgdbLoading(false); }
+    };
+
+    // ── Fullscreen ────────────────────────────────────────────────────────────
+    const toggleFullscreen = () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+        else document.exitFullscreen?.();
+    };
+
+    // ── Modal detection helpers ───────────────────────────────────────────────
+    const hasModal = () => selectedGame || showSettings || showFolderPicker || showSgdb || cropTarget;
+
+    // ── Gamepad navigation ────────────────────────────────────────────────────
+    const SETTINGS_TABS = ['appearance', 'scanning', 'api', 'general'];
+
+    const navigateModal = (dir) => {
+        const overlays = document.querySelectorAll('.modal-overlay');
+        if (!overlays.length) return;
+        const top = overlays[overlays.length - 1];
+        const els = Array.from(top.querySelectorAll('button, input, select, [tabindex="0"]'))
+            .filter(el => !el.disabled && el.offsetParent !== null && getComputedStyle(el).display !== 'none');
+        if (!els.length) return;
+        let idx = els.indexOf(document.activeElement);
+        if (idx === -1) idx = 0;
+        else { idx = (idx + dir + els.length) % els.length; }
+        els[idx]?.focus();
+    };
+
+    // Picker items count
+    const pickerItemCount = folderList.length + (pickerMode === 'file' ? fileList.length : 0);
+
+    useGamepad({
+        onUp: () => {
+            if (hasModal()) {
+                if (showFolderPicker) { setPickerFocusIndex(p => Math.max(-1, p - 1)); return; }
+                navigateModal(-1); return;
+            }
+            if (isSidebarOpen) { setSidebarFocusIndex(p => Math.max(0, p - 1)); return; }
+            setFocusedIndex(p => {
+                if (layout === 'ps') return p;
+                const cols = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth / 224) || 1 : 1;
+                const next = p - cols;
+                return next >= 0 ? next : p;
+            });
+        },
+        onDown: () => {
+            if (hasModal()) {
+                if (showFolderPicker) { setPickerFocusIndex(p => Math.min(pickerItemCount - 1, p + 1)); return; }
+                navigateModal(1); return;
+            }
+            if (isSidebarOpen) { setSidebarFocusIndex(p => Math.min(groups.length + 1, p + 1)); return; }
+            setFocusedIndex(p => {
+                if (layout === 'ps') return p;
+                const cols = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth / 224) || 1 : 1;
+                const next = p + cols;
+                return next < filteredGames.length ? next : p;
+            });
+        },
+        onLeft: () => {
+            if (hasModal()) { navigateModal(-1); return; }
+            if (layout === 'wide' || isSidebarOpen) return;
+            if (layout === 'ps') setFocusedIndex(p => Math.max(0, p - 1));
+            else setFocusedIndex(p => Math.max(0, p - 1));
+        },
+        onRight: () => {
+            if (hasModal()) { navigateModal(1); return; }
+            if (layout === 'wide' || isSidebarOpen) return;
+            setFocusedIndex(p => Math.min(filteredGames.length - 1, p + 1));
+        },
+        onLB: () => {
+            if (hasModal()) return;
+            setIsSidebarOpen(v => !v);
+            setSidebarFocusIndex(0);
+        },
+        onRB: () => {
+            // Cycle sort options from main view
+            if (!hasModal() && !isSidebarOpen) {
+                const idx = SORT_OPTIONS.findIndex(s => s.key === sortKey);
+                const next = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length];
+                setSortKey(next.key);
+                showToast(`Sıralama: ${next.label}`);
+                return;
+            }
+            // Cycle settings tabs
+            if (showSettings) {
+                setSettingsTab(tab => {
+                    const i = SETTINGS_TABS.indexOf(tab);
+                    return SETTINGS_TABS[(i + 1) % SETTINGS_TABS.length];
+                });
+            }
+        },
+        onSelect: () => { // A
+            if (showFolderPicker) {
+                if (pickerFocusIndex >= 0 && pickerFocusIndex < folderList.length) {
+                    loadDirectory(currentPath + (currentPath.endsWith('\\') ? '' : '\\') + folderList[pickerFocusIndex]);
+                    return;
+                }
+                if (pickerFocusIndex >= folderList.length) {
+                    const fileIdx = pickerFocusIndex - folderList.length;
+                    if (fileList[fileIdx]) { handleFileSelect(fileList[fileIdx]); return; }
+                }
+                if (pickerMode === 'folder' && pickerFocusIndex === -1) { handleConfirmFolder(); return; }
+                return;
+            }
+            if (hasModal()) {
+                const el = document.activeElement;
+                if (el && typeof el.click === 'function') {
+                    if (el.tagName === 'INPUT') return;
+                    el.click();
+                }
+                return;
+            }
+            if (isSidebarOpen) {
+                if (sidebarFocusIndex === 0) setActiveGroupId(null);
+                else if (sidebarFocusIndex === 1) setActiveGroupId('uncategorized');
+                else setActiveGroupId(groups[sidebarFocusIndex - 2]?.id);
+                setIsSidebarOpen(false);
+                setFocusedIndex(0);
+                return;
+            }
+            // Quick play from main view
+            if (filteredGames[focusedIndex]) playGame(filteredGames[focusedIndex].id);
+        },
+        onOptions: () => { // Y
+            if (hasModal() || isSidebarOpen) return;
+            const game = filteredGames[focusedIndex];
+            if (game) setSelectedGame(game);
+        },
+        onBack: () => { // B
+            if (cropTarget) { setCropTarget(null); return; }
+            if (showSgdb) { setShowSgdb(false); return; }
+            if (selectedGame) { setSelectedGame(null); return; }
+            if (showSettings) { setShowSettings(false); return; }
+            if (showFolderPicker) {
+                if (pickerFocusIndex >= 0) { setPickerFocusIndex(-1); return; }
+                navigateUp(); return;
+            }
+            if (isSidebarOpen) { setIsSidebarOpen(false); return; }
+        },
+    });
+
+    // ── Hero background for PS layout ─────────────────────────────────────────
+    const focusedHero = (() => {
+        const g = filteredGames[focusedIndex];
+        if (!g) return 'none';
+        if (g.hero) return `url('${COVERS_BASE}/${g.hero}?t=${Date.now()}')`;
+        if (g.cover) return `url('${COVERS_BASE}/${g.cover}?t=${Date.now()}')`;
+        return 'none';
+    })();
+
+    // ── Sidebar scroll sync ───────────────────────────────────────────────────
+    useEffect(() => {
+        if (isSidebarOpen && sidebarRef.current) {
+            const children = sidebarRef.current.children;
+            children[sidebarFocusIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }, [sidebarFocusIndex, isSidebarOpen]);
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    return (
+        <div className="app-container">
+            {/* PS mode background */}
+            {layout === 'ps' && (
+                <div className="hero-background" style={{ backgroundImage: focusedHero }} />
+            )}
+
+            {/* Sidebar */}
+            <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                groups={groups}
+                games={games}
+                activeGroupId={activeGroupId}
+                setActiveGroupId={setActiveGroupId}
+                focusIndex={sidebarFocusIndex}
+                onAddGroup={addGroup}
+                onDeleteGroup={removeGroup}
+                sidebarRef={sidebarRef}
+            />
+
+            {/* Main content */}
+            <div className="main-content" style={{ display: layout === 'ps' ? 'flex' : 'block', flexDirection: 'column' }}>
+                <TopBar
+                    layout={layout} setLayout={setLayout}
+                    isScanning={isScanning} isRescanning={isRescanning}
+                    isFullscreen={isFullscreen}
+                    sortKey={sortKey} setSortKey={sk => { _randomSeed = Math.random(); setSortKey(sk); }}
+                    searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+                    onOpenSidebar={() => setIsSidebarOpen(true)}
+                    onOpenSettings={openSettings}
+                    onOpenFolderPicker={openFolderPicker}
+                    onRescanAll={handleRescanAll}
+                    onToggleFullscreen={toggleFullscreen}
+                    uiConfig={uiConfig}
+                    saveConfigFn={apiSaveConfig}
+                />
+
+                <GameGrid
+                    games={filteredGames}
+                    layout={layout}
+                    focusedIndex={focusedIndex}
+                    onOpen={setSelectedGame}
+                    onPlay={playGame}
+                    loading={loading}
+                    containerRef={containerRef}
+                />
+
+                {/* PS mode gamepad hints */}
+                {layout === 'ps' && filteredGames.length > 0 && (
+                    <div style={{ marginTop: 'auto', display: 'flex', gap: '24px', justifyContent: 'center', opacity: 0.65, padding: '16px' }}>
+                        {[['A', t('hints.play')], ['Y', t('hints.details')], ['LB', t('hints.categories')], ['RB', t('hints.sorting')]].map(([btn, lbl]) => (
+                            <span key={btn} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px' }}>
+                                <span style={{ background: '#fff', color: '#000', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>{btn}</span>
+                                {lbl}
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {/* ── Modals ── */}
+
+            {showFolderPicker && (
+                <FolderPicker
+                    pickerMode={pickerMode}
+                    drives={drives}
+                    currentPath={currentPath} setCurrentPath={setCurrentPath}
+                    folders={folderList} files={fileList}
+                    onClose={() => setShowFolderPicker(false)}
+                    onConfirmFolder={handleConfirmFolder}
+                    onFileSelect={handleFileSelect}
+                    onLoadDirectory={loadDirectory}
+                    onNavigateUp={navigateUp}
+                    gpFocusIndex={pickerFocusIndex}
+                />
+            )}
+
+            {showSettings && uiConfig && (
+                <SettingsModal
+                    uiConfig={uiConfig} setUiConfig={setUiConfig}
+                    scanFolders={scanFolders}
+                    onSave={saveSettings}
+                    onClose={() => setShowSettings(false)}
+                    onRemoveScanFolder={handleRemoveScanFolder}
+                    onOpenFolderPicker={openFolderPicker}
+                    applyUiConfig={applyUiConfig}
+                    activeTab={settingsTab}
+                    setActiveTab={setSettingsTab}
+                />
+            )}
+
+            {selectedGame && !showSgdb && !cropTarget && (
+                <GameModal
+                    game={selectedGame}
+                    groups={groups}
+                    onClose={() => setSelectedGame(null)}
+                    onPlay={playGame}
+                    onDelete={removeGame}
+                    onSave={(payload) => saveGameEdits(selectedGame.id, payload)}
+                    onOpenSgdb={(q) => { setShowSgdb(true); }}
+                    onImageFileSelect={handleImageFileSelect}
+                />
+            )}
+
+            {showSgdb && selectedGame && (
+                <SgdbModal
+                    game={selectedGame}
+                    onClose={() => setShowSgdb(false)}
+                    onSearch={handleSgdbSearch}
+                    onApply={handleSgdbAction}
+                    loading={sgdbLoading}
+                />
+            )}
+
+            {cropTarget && (
+                <ImageCropper
+                    image={cropTarget.dataUrl}
+                    aspect={cropTarget.type === 'cover' ? 2 / 3 : 16 / 9}
+                    onCancel={() => setCropTarget(null)}
+                    onCropDone={handleCropDone}
+                />
+            )}
+
+            {/* Toast */}
+            {toast && <div className="toast">{toast}</div>}
+        </div>
+    );
+}
