@@ -6,6 +6,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useLocale } from './i18n/LocaleContext.jsx';
 import { useGamepad } from './hooks/useGamepad.js';
+import { useKeyboard } from './hooks/useKeyboard.js';
 import { useAppState, SORT_OPTIONS_MAPPING, resetRandomSeed } from './hooks/useAppState.js';
 import { useAppActions } from './hooks/useAppActions.js';
 
@@ -150,6 +151,24 @@ export default function App() {
             if (showFolderPicker) { if (pickerFocusIndex>=0) { setPickerFocusIndex(-1); return; } navigateUp(); return; }
             if (isSidebarOpen) { setIsSidebarOpen(false); return; }
         },
+    });
+
+    // Keyboard navigation — identical callbacks, no duplication
+    useKeyboard({
+        onUp:    () => { if (hasModal()) { navigateModal(-1); return; } if (isSidebarOpen) { setSidebarFocusIndex(p => Math.max(0, p-1)); return; } if (layout === 'ps') return; const cols = getColCount(); setFocusedIndex(p => { const n = p - cols; return n >= 0 ? n : p; }); },
+        onDown:  () => { if (hasModal()) { navigateModal(1);  return; } if (isSidebarOpen) { setSidebarFocusIndex(p => Math.min(groups.length+1, p+1)); return; } if (layout === 'ps') return; const cols = getColCount(); setFocusedIndex(p => { const n = p + cols; return n < filteredGames.length ? n : p; }); },
+        onLeft:  () => { if (hasModal()) { navigateModal(-1); return; } if (layout==='wide'||isSidebarOpen) return; setFocusedIndex(p=>Math.max(0,p-1)); },
+        onRight: () => { if (hasModal()) { navigateModal(1);  return; } if (layout==='wide'||isSidebarOpen) return; setFocusedIndex(p=>Math.min(filteredGames.length-1,p+1)); },
+        onLB:    () => { if (hasModal()) return; setIsSidebarOpen(v=>!v); setSidebarFocusIndex(0); },
+        onRB:    () => { if (!hasModal() && !isSidebarOpen) { const opts=SORT_OPTIONS_MAPPING(t); const i=opts.findIndex(s=>s.key===sortKey); const n=opts[(i+1)%opts.length]; resetRandomSeed(); setSortKey(n.key); } },
+        onSelect: () => {
+            if (showFolderPicker) { if (pickerMode==='folder' && pickerFocusIndex===-1) { handleConfirmFolder(); return; } return; }
+            if (hasModal()) { const el=document.activeElement; if (el?.tagName!=='INPUT') el?.click(); return; }
+            if (isSidebarOpen) { if (sidebarFocusIndex===0) setActiveGroupId(null); else if (sidebarFocusIndex===1) setActiveGroupId('uncategorized'); else setActiveGroupId(groups[sidebarFocusIndex-2]?.id); setIsSidebarOpen(false); setFocusedIndex(0); return; }
+            if (filteredGames[focusedIndex]) setSelectedGame(filteredGames[focusedIndex]);
+        },
+        onHoldA: () => { if (hasModal() || isSidebarOpen) return; if (filteredGames[focusedIndex]) playGame(filteredGames[focusedIndex].id); },
+        onBack:  () => { if (cropTarget) { setCropTarget(null); return; } if (showSgdb) { setShowSgdb(false); return; } if (selectedGame) { setSelectedGame(null); return; } if (showSettings) { setShowSettings(false); return; } if (showFolderPicker) { navigateUp(); return; } if (isSidebarOpen) { setIsSidebarOpen(false); return; } },
     });
 
     const focusedHero = useMemo(() => {
