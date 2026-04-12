@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-export const API_BASE = 'http://localhost:3001/api';
-export const COVERS_BASE = 'http://localhost:3001/covers';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001/api';
+export const COVERS_BASE = import.meta.env.VITE_COVERS_BASE || 'http://localhost:3001/covers';
 
 // Games
 export const fetchGames = () => axios.get(`${API_BASE}/games`).then(r => r.data);

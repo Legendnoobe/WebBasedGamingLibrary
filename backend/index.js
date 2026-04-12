@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -10,7 +11,7 @@ const { launchGame } = require('./launcher');
 const { downloadCover, searchSteamGridDB, getSteamGridImages } = require('./metadata');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -108,8 +109,14 @@ app.post('/api/games', async (req, res) => {
 
 // Scan folder endpoint
 app.post('/api/scan', async (req, res) => {
-    const { folderPath } = req.body;
-    if (!folderPath) return res.status(400).json({ error: 'folderPath is required' });
+    try {
+        const { folderPath } = req.body;
+        if (!folderPath || typeof folderPath !== 'string') {
+            return res.status(400).json({ error: 'Geçersiz klasör yolu (folderPath required)' });
+        }
+        if (!fs.existsSync(folderPath)) {
+            return res.status(400).json({ error: 'Klasör bulunamadı' });
+        }
 
     let data = db.getDb();
     if (!data.scanFolders) data.scanFolders = [];
@@ -117,9 +124,13 @@ app.post('/api/scan', async (req, res) => {
         data.scanFolders.push(folderPath);
     }
 
-    const addedCount = await performScan(folderPath);
-    db.save();
-    res.json({ success: true, added: addedCount });
+        const addedCount = await performScan(folderPath);
+        db.save();
+        res.json({ success: true, added: addedCount });
+    } catch (err) {
+        console.error("Scan error:", err);
+        res.status(500).json({ error: 'Tarama sırasında hata oluştu' });
+    }
 });
 
 app.post('/api/rescan-all', async (req, res) => {

@@ -11,6 +11,8 @@ import SettingsModal from './components/settings/SettingsModal.jsx';
 import FolderPicker from './components/pickers/FolderPicker.jsx';
 import SgdbModal from './components/sgdb/SgdbModal.jsx';
 
+const SORT_OPTIONS_MAPPING = (t) => SORT_KEY_LIST.map(key => ({ key, label: t(`sort.${key}`) }));
+
 import {
     fetchGames, addGame, updateGame, deleteGame as apiDeleteGame, launchGame as apiLaunchGame,
     uploadCover, uploadHero,
@@ -161,6 +163,7 @@ export default function App() {
 
     // ── Initial load ──────────────────────────────────────────────────────────
     useEffect(() => {
+        let isMounted = true;
         (async () => {
             try {
                 const [g, cfg, gr] = await Promise.all([fetchGames(), fetchConfig(), fetchGroups()]);
@@ -472,10 +475,11 @@ export default function App() {
         onRB: () => {
             // Cycle sort options from main view
             if (!hasModal() && !isSidebarOpen) {
-                const idx = SORT_OPTIONS.findIndex(s => s.key === sortKey);
-                const next = SORT_OPTIONS[(idx + 1) % SORT_OPTIONS.length];
+                const options = SORT_OPTIONS_MAPPING(t);
+                const idx = options.findIndex(s => s.key === sortKey);
+                const next = options[(idx + 1) % options.length];
                 setSortKey(next.key);
-                showToast(`Sıralama: ${next.label}`);
+                showToast(`${t('topbar.sort')}: ${next.label}`);
                 return;
             }
             // Cycle settings tabs

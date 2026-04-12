@@ -33,17 +33,29 @@ git clone https://github.com/YOUR_USERNAME/WebBasedGamingLibrary.git
 cd WebBasedGamingLibrary
 ```
 
-### 2 — Install all dependencies
+### 2 — Setup Environment
+Copy the example environment file and fill in your values (like SteamGridDB API key):
+```bash
+cp .env.example .env
+```
+
+### 3 — Choose your way
+
+#### Option A: Docker (Recommended)
+Run everything in a isolated container with one command:
+```bash
+docker-compose up -d
+```
+
+#### Option B: Normal Installation
+1. Install all dependencies:
 ```bash
 npm run install:all
 ```
-This installs both backend and frontend packages in one step.
-
-### 3 — Run
+2. Run the development servers:
 ```bash
 npm run dev
 ```
-Or just double-click **`start.bat`**.
 
 Then open **http://localhost:5173** in your browser.
 
