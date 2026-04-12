@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useGamepad } from './hooks/useGamepad.js';
 import { ImageCropper } from './ImageCropper.jsx';
 import { useLocale } from './i18n/LocaleContext.jsx';
@@ -11,8 +11,6 @@ import SettingsModal from './components/settings/SettingsModal.jsx';
 import FolderPicker from './components/pickers/FolderPicker.jsx';
 import SgdbModal from './components/sgdb/SgdbModal.jsx';
 
-const SORT_OPTIONS_MAPPING = (t) => SORT_KEY_LIST.map(key => ({ key, label: t(`sort.${key}`) }));
-
 import {
     fetchGames, addGame, updateGame, deleteGame as apiDeleteGame, launchGame as apiLaunchGame,
     uploadCover, uploadHero,
@@ -24,6 +22,9 @@ import {
     sgdbSearch, sgdbGetGame, sgdbApply,
     COVERS_BASE,
 } from './api/api.js';
+
+// ─── Sorting constants ─────────────────────────────────────────────────────────
+const SORT_OPTIONS_MAPPING = (t) => SORT_KEY_LIST.map(key => ({ key, label: t(`sort.${key}`) }));
 
 // ─── Sorting helper ───────────────────────────────────────────────────────────
 let _randomSeed = Math.random();
@@ -46,7 +47,6 @@ function applySorting(games, sortKey, groups) {
             return ga.localeCompare(gb);
         });
         case 'random': {
-            // Seeded shuffle so it doesn't change every render
             const seeded = copy.map((v, i) => ({ v, r: Math.abs(Math.sin(_randomSeed + i)) }));
             return seeded.sort((a, b) => a.r - b.r).map(x => x.v);
         }
@@ -100,12 +100,19 @@ export default function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [isRescanning, setIsRescanning] = useState(false);
 
-    // Gamepad focus
+    // Gamepad / mouse focus
     const [focusedIndex, setFocusedIndex] = useState(0);
     const containerRef = useRef(null);
 
+    // Refs for edge-scroll (to avoid stale closures in event listeners)
+    const edgeScrollRef = useRef(null);
+    const layoutRef = useRef('grid');
+    const gameCountRef = useRef(0);
+    const hasModalRef = useRef(false);
+    const sidebarOpenRef = useRef(false);
+
     // ── Derived: filtered + sorted game list ─────────────────────────────────
-    const filteredGames = React.useMemo(() => {
+    const filteredGames = useMemo(() => {
         const filtered = games.filter(g =>
             g.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
             (activeGroupId === null ? true : (activeGroupId === 'uncategorized' ? !g.groupId : g.groupId === activeGroupId))
@@ -113,11 +120,26 @@ export default function App() {
         return applySorting(filtered, sortKey, groups);
     }, [games, searchQuery, activeGroupId, sortKey, groups]);
 
+    // Keep refs in sync
+    useEffect(() => { layoutRef.current = layout; }, [layout]);
+    useEffect(() => { gameCountRef.current = filteredGames.length; }, [filteredGames.length]);
+
     // ── Toast ────────────────────────────────────────────────────────────────
     const showToast = useCallback((msg) => {
         setToast(msg);
         setTimeout(() => setToast(''), 3000);
     }, []);
+
+    // ── Modal detection helpers ───────────────────────────────────────────────
+    // Keep as plain function (not callback) since it reads current state via closure
+    const hasModal = useCallback(
+        () => !!(selectedGame || showSettings || showFolderPicker || showSgdb || cropTarget),
+        [selectedGame, showSettings, showFolderPicker, showSgdb, cropTarget]
+    );
+
+    // Keep ref in sync so edge-scroll handler can read without stale closure
+    useEffect(() => { hasModalRef.current = hasModal(); }, [hasModal]);
+    useEffect(() => { sidebarOpenRef.current = isSidebarOpen; }, [isSidebarOpen]);
 
     // ── CSS variable application ──────────────────────────────────────────────
     const applyUiConfig = useCallback((cfg) => {
@@ -133,13 +155,12 @@ export default function App() {
             return `${r}, ${g}, ${b}`;
         };
 
-        // Core color tokens
         set('--bg-dark',      cfg.bgDark);
         const rgb = hexToRgb(cfg.bgDark);
         if (rgb) set('--bg-dark-rgb', rgb);
 
         set('--bg-card',      cfg.bgCard);
-        set('--bg-card-hover',cfg.bgCardHover);
+        set('--bg-card-hover', cfg.bgCardHover);
         set('--text-main',    cfg.textMain);
         set('--text-muted',   cfg.textMuted);
         set('--accent',       cfg.accent);
@@ -148,7 +169,6 @@ export default function App() {
         set('--danger',       cfg.danger);
         if (cfg.playBtnOpacity !== undefined) set('--play-btn-opacity', cfg.playBtnOpacity);
 
-        // Surface/panel tokens (light vs dark themes)
         set('--bg-panel',        cfg.bgPanel);
         set('--bg-surface',      cfg.bgSurface);
         set('--bg-input',        cfg.bgInput);
@@ -167,6 +187,7 @@ export default function App() {
         (async () => {
             try {
                 const [g, cfg, gr] = await Promise.all([fetchGames(), fetchConfig(), fetchGroups()]);
+                if (!isMounted) return;
                 setGames(g || []);
                 setUiConfig(cfg);
                 setGroups(gr || []);
@@ -175,22 +196,62 @@ export default function App() {
             } catch {
                 showToast(t('toast.serverDown'));
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         })();
+        return () => { isMounted = false; };
+    }, [applyUiConfig, showToast, t]);
 
+    // ── Global event listeners ─────────────────────────────────────────────────
+    useEffect(() => {
+        // Fullscreen
         const onFSChange = () => setIsFullscreen(!!document.fullscreenElement);
         document.addEventListener('fullscreenchange', onFSChange);
 
-        // GameCard hover events
-        const onGameHover = (e) => setFocusedIndex(e.detail.index);
+        // GameCard hover → only update focusedIndex if NOT in PS mode
+        const onGameHover = (e) => {
+            if (layoutRef.current === 'ps') return;
+            setFocusedIndex(e.detail.index);
+        };
         document.addEventListener('gamehover', onGameHover);
+
+        // Edge scrolling for PS mode
+        const onMouseMove = (e) => {
+            if (layoutRef.current !== 'ps' || hasModalRef.current || sidebarOpenRef.current) {
+                if (edgeScrollRef.current) {
+                    clearInterval(edgeScrollRef.current);
+                    edgeScrollRef.current = null;
+                }
+                return;
+            }
+
+            const threshold = window.innerWidth * 0.15;
+            let dir = 0;
+            if (e.clientX < threshold) dir = -1;
+            else if (e.clientX > window.innerWidth - threshold) dir = 1;
+
+            if (dir !== 0 && !edgeScrollRef.current) {
+                edgeScrollRef.current = setInterval(() => {
+                    setFocusedIndex(prev => {
+                        const next = prev + dir;
+                        if (next >= 0 && next < gameCountRef.current) return next;
+                        return prev;
+                    });
+                }, 250);
+            } else if (dir === 0 && edgeScrollRef.current) {
+                clearInterval(edgeScrollRef.current);
+                edgeScrollRef.current = null;
+            }
+        };
+        document.addEventListener('mousemove', onMouseMove);
 
         return () => {
             document.removeEventListener('fullscreenchange', onFSChange);
             document.removeEventListener('gamehover', onGameHover);
+            document.removeEventListener('mousemove', onMouseMove);
+            if (edgeScrollRef.current) clearInterval(edgeScrollRef.current);
         };
-    }, []);
+    }, []); // mounts once — all state read via refs
 
     // ── Game actions ──────────────────────────────────────────────────────────
     const refreshGames = async () => {
@@ -382,9 +443,6 @@ export default function App() {
         try { return await sgdbSearch(query); } catch { showToast(t('sgdb.searchError')); return null; } finally { setSgdbLoading(false); }
     };
 
-    // Called by SgdbModal with two different signatures:
-    // (gameId, null, null)         → fetch images for game
-    // (null, 'cover'|'hero', url) → apply image
     const handleSgdbAction = async (gameId, type, url) => {
         setSgdbLoading(true);
         try {
@@ -407,9 +465,6 @@ export default function App() {
         else document.exitFullscreen?.();
     };
 
-    // ── Modal detection helpers ───────────────────────────────────────────────
-    const hasModal = () => selectedGame || showSettings || showFolderPicker || showSgdb || cropTarget;
-
     // ── Gamepad navigation ────────────────────────────────────────────────────
     const SETTINGS_TABS = ['appearance', 'scanning', 'api', 'general'];
 
@@ -426,7 +481,6 @@ export default function App() {
         els[idx]?.focus();
     };
 
-    // Picker items count
     const pickerItemCount = folderList.length + (pickerMode === 'file' ? fileList.length : 0);
 
     useGamepad({
@@ -459,8 +513,7 @@ export default function App() {
         onLeft: () => {
             if (hasModal()) { navigateModal(-1); return; }
             if (layout === 'wide' || isSidebarOpen) return;
-            if (layout === 'ps') setFocusedIndex(p => Math.max(0, p - 1));
-            else setFocusedIndex(p => Math.max(0, p - 1));
+            setFocusedIndex(p => Math.max(0, p - 1));
         },
         onRight: () => {
             if (hasModal()) { navigateModal(1); return; }
@@ -473,7 +526,6 @@ export default function App() {
             setSidebarFocusIndex(0);
         },
         onRB: () => {
-            // Cycle sort options from main view
             if (!hasModal() && !isSidebarOpen) {
                 const options = SORT_OPTIONS_MAPPING(t);
                 const idx = options.findIndex(s => s.key === sortKey);
@@ -482,7 +534,6 @@ export default function App() {
                 showToast(`${t('topbar.sort')}: ${next.label}`);
                 return;
             }
-            // Cycle settings tabs
             if (showSettings) {
                 setSettingsTab(tab => {
                     const i = SETTINGS_TABS.indexOf(tab);
@@ -519,7 +570,6 @@ export default function App() {
                 setFocusedIndex(0);
                 return;
             }
-            // Quick play from main view
             if (filteredGames[focusedIndex]) playGame(filteredGames[focusedIndex].id);
         },
         onOptions: () => { // Y
@@ -541,13 +591,13 @@ export default function App() {
     });
 
     // ── Hero background for PS layout ─────────────────────────────────────────
-    const focusedHero = (() => {
+    const focusedHero = useMemo(() => {
         const g = filteredGames[focusedIndex];
         if (!g) return 'none';
-        if (g.hero) return `url('${COVERS_BASE}/${g.hero}?t=${Date.now()}')`;
-        if (g.cover) return `url('${COVERS_BASE}/${g.cover}?t=${Date.now()}')`;
+        if (g.hero) return `url('${COVERS_BASE}/${g.hero}')`;
+        if (g.cover) return `url('${COVERS_BASE}/${g.cover}')`;
         return 'none';
-    })();
+    }, [filteredGames, focusedIndex]);
 
     // ── Sidebar scroll sync ───────────────────────────────────────────────────
     useEffect(() => {
@@ -658,7 +708,7 @@ export default function App() {
                     onPlay={playGame}
                     onDelete={removeGame}
                     onSave={(payload) => saveGameEdits(selectedGame.id, payload)}
-                    onOpenSgdb={(q) => { setShowSgdb(true); }}
+                    onOpenSgdb={() => { setShowSgdb(true); }}
                     onImageFileSelect={handleImageFileSelect}
                 />
             )}
