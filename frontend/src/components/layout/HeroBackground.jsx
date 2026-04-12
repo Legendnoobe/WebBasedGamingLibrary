@@ -38,8 +38,7 @@ export default function HeroBackground({ src }) {
                         backgroundPosition: 'center',
                         opacity: layer.active ? 1 : 0,
                         transition: `opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-                        filter: 'blur(2px) brightness(0.35)',
-                        transform: 'scale(1.05)', // hide blur edges
+                        filter: 'brightness(0.6)',
                     }}
                 />
             ))}
