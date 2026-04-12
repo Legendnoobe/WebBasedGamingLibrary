@@ -14,6 +14,7 @@ export default function GameCard({ game, index, focusedIndex, layout, onOpen, on
     return (
         <div
             className={`game-card ${isFocused ? 'focused' : ''}`}
+            data-game-index={index}
             onMouseEnter={() => {
                 const event = new CustomEvent('gamehover', { detail: { index } });
                 document.dispatchEvent(event);

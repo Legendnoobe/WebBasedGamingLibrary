@@ -52,6 +52,13 @@ export default function App() {
     } = actions;
 
     // Sidebar scroll sync
+    // Scroll focused card into view (grid / wide layouts)
+    useEffect(() => {
+        if (layout === 'ps' || hasModal()) return;
+        const el = document.querySelector(`[data-game-index="${focusedIndex}"]`);
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }, [focusedIndex, layout]);
+
     useEffect(() => {
         if (isSidebarOpen && sidebarRef.current) {
             sidebarRef.current.children[sidebarFocusIndex]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -73,16 +80,31 @@ export default function App() {
 
     const pickerItemCount = folderList.length + (pickerMode === 'file' ? fileList.length : 0);
 
+    // Compute real grid column count from CSS
+    const getColCount = () => {
+        if (layout !== 'grid' || !containerRef.current) return 1;
+        const grid = containerRef.current.querySelector('.game-grid');
+        if (!grid) return 1;
+        const cols = window.getComputedStyle(grid)
+            .getPropertyValue('grid-template-columns')
+            .trim().split(/\s+/).length;
+        return cols || 1;
+    };
+
     useGamepad({
         onUp: () => {
             if (hasModal()) { showFolderPicker ? setPickerFocusIndex(p => Math.max(-1, p-1)) : navigateModal(-1); return; }
             if (isSidebarOpen) { setSidebarFocusIndex(p => Math.max(0, p-1)); return; }
-            setFocusedIndex(p => { if (layout === 'ps') return p; const cols = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth/224)||1:1; const n=p-cols; return n>=0?n:p; });
+            if (layout === 'ps') return;
+            const cols = getColCount();
+            setFocusedIndex(p => { const n = p - cols; return n >= 0 ? n : p; });
         },
         onDown: () => {
             if (hasModal()) { showFolderPicker ? setPickerFocusIndex(p => Math.min(pickerItemCount-1, p+1)) : navigateModal(1); return; }
             if (isSidebarOpen) { setSidebarFocusIndex(p => Math.min(groups.length+1, p+1)); return; }
-            setFocusedIndex(p => { if (layout === 'ps') return p; const cols = layout === 'grid' && containerRef.current ? Math.floor(containerRef.current.offsetWidth/224)||1:1; const n=p+cols; return n<filteredGames.length?n:p; });
+            if (layout === 'ps') return;
+            const cols = getColCount();
+            setFocusedIndex(p => { const n = p + cols; return n < filteredGames.length ? n : p; });
         },
         onLeft:  () => { if (hasModal()) { navigateModal(-1); return; } if (layout==='wide'||isSidebarOpen) return; setFocusedIndex(p=>Math.max(0,p-1)); },
         onRight: () => { if (hasModal()) { navigateModal(1);  return; } if (layout==='wide'||isSidebarOpen) return; setFocusedIndex(p=>Math.min(filteredGames.length-1,p+1)); },
