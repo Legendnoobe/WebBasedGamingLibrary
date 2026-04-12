@@ -120,14 +120,10 @@ function scoreExe(exePath, exeName, gameFolder, depthFromGameRoot, rootScanPath)
 }
 
 // ─── Recursive EXE finder ─────────────────────────────────────────────────────
-function findExeRecursive(dirPath, depth = 0, maxDepth = 4) {
+function findExeRecursive(dirPath, ignoredList, depth = 0, maxDepth = 4) {
     if (depth > maxDepth) return [];
     let exes = [];
     try {
-        const db = require('./database');
-        const uiConfig = db.getDb().uiConfig || {};
-        const ignoredStr = uiConfig.ignoredExes || 'unins, crash, redist, setup, dxwebsetup';
-        const ignoredList = ignoredStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
         const items = fs.readdirSync(dirPath, { withFileTypes: true });
         for (const item of items) {
@@ -136,7 +132,7 @@ function findExeRecursive(dirPath, depth = 0, maxDepth = 4) {
                 // Skip known bad folders entirely — don't even descend
                 const segLow = item.name.toLowerCase();
                 const isBadFolder = HIGH_NEGATIVE_FOLDERS.some(kw => segLow.includes(kw));
-                if (!isBadFolder) exes = exes.concat(findExeRecursive(fullPath, depth + 1, maxDepth));
+                if (!isBadFolder) exes = exes.concat(findExeRecursive(fullPath, ignoredList, depth + 1, maxDepth));
             } else if (item.isFile() && item.name.toLowerCase().endsWith('.exe')) {
                 const low = item.name.toLowerCase();
                 const isUserIgnored = ignoredList.some(ign => low.includes(ign));
@@ -153,6 +149,11 @@ function scanFolderForGames(folderPath) {
     const foundGames = [];
 
     try {
+        const db = require('./database');
+        const uiConfig = db.getDb().uiConfig || {};
+        const ignoredStr = uiConfig.ignoredExes || 'unins, crash, redist, setup, dxwebsetup';
+        const ignoredList = ignoredStr.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+
         const rootItems = fs.readdirSync(folderPath, { withFileTypes: true });
 
         for (const item of rootItems) {
@@ -160,7 +161,7 @@ function scanFolderForGames(folderPath) {
 
             if (item.isDirectory()) {
                 const gameName = cleanGameName(item.name);
-                const allExes = findExeRecursive(itemPath);
+                const allExes = findExeRecursive(itemPath, ignoredList);
                 if (allExes.length === 0) continue;
 
                 const scored = allExes
@@ -176,7 +177,8 @@ function scanFolderForGames(folderPath) {
             } else if (item.isFile() && item.name.toLowerCase().endsWith('.exe')) {
                 const low = item.name.toLowerCase();
                 const isBasicBad = HIGH_NEGATIVE.some(kw => low.includes(kw));
-                if (!isBasicBad) {
+                const isUserIgnored = ignoredList.some(ign => low.includes(ign));
+                if (!isBasicBad && !isUserIgnored) {
                     foundGames.push({
                         name: cleanGameName(path.basename(item.name, '.exe')),
                         path: folderPath,
