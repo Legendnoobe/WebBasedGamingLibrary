@@ -8,6 +8,7 @@ import { useLocale } from './i18n/LocaleContext.jsx';
 import { useGamepad } from './hooks/useGamepad.js';
 import { useAppState, SORT_OPTIONS_MAPPING, resetRandomSeed } from './hooks/useAppState.js';
 import { useAppActions } from './hooks/useAppActions.js';
+
 import { ImageCropper } from './ImageCropper.jsx';
 import { COVERS_BASE } from './api/api.js';
 
