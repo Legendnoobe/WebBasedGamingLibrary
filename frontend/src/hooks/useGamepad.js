@@ -15,7 +15,7 @@ const BUTTONS = {
   DPAD_RIGHT: 15,
 };
 
-export function useGamepad(callbacks) {
+export function useGamepad(callbacks, setIsConnected) {
   const requestRef = useRef();
   const lastState = useRef({});
   // Use ref to hold latest callbacks without recreating the poll loop
@@ -26,7 +26,22 @@ export function useGamepad(callbacks) {
   });
 
   useEffect(() => {
+    const checkConnection = () => {
+      const gps = navigator.getGamepads ? navigator.getGamepads() : [];
+      if (setIsConnected) setIsConnected(gps.some(gp => gp !== null));
+    };
+    
+    window.addEventListener("gamepadconnected", checkConnection);
+    window.addEventListener("gamepaddisconnected", checkConnection);
+    checkConnection();
+
     const poll = () => {
+      // Eğer tarayıcı penceresi o an aktif değilse (oyun açıksa vb.) gamepad tuşlarını YOK SAY.
+      if (!document.hasFocus()) {
+          requestRef.current = requestAnimationFrame(poll);
+          return;
+      }
+
       const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
       const gp = gamepads[0];
 
@@ -109,6 +124,10 @@ export function useGamepad(callbacks) {
     };
 
     requestRef.current = requestAnimationFrame(poll);
-    return () => cancelAnimationFrame(requestRef.current);
+    return () => {
+        cancelAnimationFrame(requestRef.current);
+        window.removeEventListener("gamepadconnected", checkConnection);
+        window.removeEventListener("gamepaddisconnected", checkConnection);
+    };
   }, []); // runs once
 }

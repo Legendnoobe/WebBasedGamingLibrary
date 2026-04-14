@@ -143,7 +143,9 @@ export default function App() {
         },
     };
 
-    useGamepad(navCallbacks);
+    const [isGamepadConnected, setIsGamepadConnected] = React.useState(false);
+
+    useGamepad(navCallbacks, setIsGamepadConnected);
     useKeyboard(navCallbacks);
 
     useEffect(() => {
@@ -158,5 +160,5 @@ export default function App() {
         }
     }, [state.uiConfig]);
 
-    return <AppLayout state={state} actions={{ ...actions, resetRandomSeed }} />;
+    return <AppLayout state={{ ...state, isGamepadConnected }} actions={{ ...actions, resetRandomSeed }} />;
 }

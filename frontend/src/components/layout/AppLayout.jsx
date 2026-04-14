@@ -68,7 +68,10 @@ export default function AppLayout({ state, actions }) {
 
                 {layout === 'ps' && filteredGames.length > 0 && (
                     <div className="ps-bottom-bar">
-                        {[['A', t('hints.details')], ['A●', t('hints.play')], ['LB', t('hints.categories')], ['RB', t('hints.sorting')]].map(([btn, lbl]) => (
+                        {(state.isGamepadConnected 
+                            ? [['A', t('hints.details')], ['A●', t('hints.play')], ['LB', t('hints.categories')], ['RB', t('hints.sorting')]]
+                            : [['Enter', t('hints.details')], ['Enter●', t('hints.play')], ['Q', t('hints.categories')], ['E', t('hints.sorting')]]
+                        ).map(([btn, lbl]) => (
                             <span key={btn} className="ps-btn-hint">
                                 <span className="ps-btn-icon">{btn}</span>
                                 {lbl}
