@@ -1,6 +1,7 @@
 import React from 'react';
 import { Gamepad2, Folder, X } from 'lucide-react';
 import { useLocale } from '../../i18n/LocaleContext.jsx';
+import ver from '../../version.json';
 
 export default function Sidebar({ isOpen, onClose, groups, games, activeGroupId, setActiveGroupId, focusIndex, onAddGroup, onDeleteGroup, sidebarRef }) {
     const { t } = useLocale();
@@ -37,6 +38,9 @@ export default function Sidebar({ isOpen, onClose, groups, games, activeGroupId,
                 <button className="btn" style={{ marginTop: '16px', background: 'var(--bg-input)', border: '1px solid var(--border-subtle)', width: '100%' }} onClick={onAddGroup}>
                     {t('sidebar.addCategory')}
                 </button>
+                <div style={{ marginTop: 'auto', paddingTop: '16px', textAlign: 'center', opacity: 0.3, fontSize: '11px', letterSpacing: '0.5px' }}>
+                    WBGL v{ver.major}.{ver.minor}.{ver.patch}.{ver.build}
+                </div>
             </div>
         </>
     );

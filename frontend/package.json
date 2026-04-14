@@ -1,11 +1,14 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/build.js && vite build",
+    "upgrade:major": "node scripts/build.js --major",
+    "upgrade:minor": "node scripts/build.js --minor",
+    "upgrade:patch": "node scripts/build.js --patch",
     "lint": "eslint .",
     "preview": "vite preview"
   },
