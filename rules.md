@@ -97,3 +97,7 @@ Commit mesajları aşağıdaki prefix'leri kullanmalıdır:
 | 🔴 Kritik | Dosya > 300 satır | Hemen bölünmeli |
 | 🟡 Önemli | 200–300 satır arası | Bir sonraki PR'da bölünmeli |
 | 🔵 Bilgi | Hardcoded renk var | İlgili PR'da düzeltilmeli |
+
+## 8. AI / Asistan Davranış Kuralları
+
+- **OTOMATİK COMMIT YASAKTIR:** Yapılan değişiklikler ve yeni eklenen kodlar, kullanıcı (developer) açıkça talep etmediği sürece `git commit` veya `git push` ile repoya gönderilmemelidir. Değişiklikler yalnızca test (build) edilebilir ve yerelde tutulur. Commit yönetiminden yalnızca kullanıcı sorumludur.
