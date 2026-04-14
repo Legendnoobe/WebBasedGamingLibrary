@@ -1,6 +1,7 @@
 <div align="center">
   <br />
-  <h1>🎮 Web-Based Gaming Library (WBGL)</h1>
+  <img src="frontend/public/logo.png" alt="WBGL Logo" width="120" height="auto" />
+  <h1>Web-Based Gaming Library (WBGL)</h1>
   <p><strong>v2.0.x</strong> | A highly dynamic, self-hosted, fully gamepad-accessible library manager.</p>
 </div>
 

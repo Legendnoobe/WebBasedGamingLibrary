@@ -9,9 +9,9 @@ export default function Sidebar({ isOpen, onClose, groups, games, activeGroupId,
         <>
             <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} />
             <div className={`collapsible-sidebar glass ${isOpen ? 'open' : ''}`}>
-                <div className="brand" style={{ marginBottom: '24px' }}>
-                    <Gamepad2 size={26} color="var(--accent)" fill="var(--accent)" />
-                    <span>{t('sidebar.title')}</span>
+                <div className="brand" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img src="/logo.png" alt="WBGL Logo" style={{ width: '32px', height: '32px', objectFit: 'contain' }} />
+                    <span style={{ fontWeight: 800 }}>{t('sidebar.title')}</span>
                 </div>
 
                 <div ref={sidebarRef} style={{ flex: 1, overflowY: 'auto' }}>
