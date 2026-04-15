@@ -16,7 +16,9 @@ async function downloadCover(url) {
     } catch (e) {}
 
     const filename = `${hash}${ext}`;
-    const coverDir = path.join(__dirname, 'data', 'covers');
+    const IS_COMPILED = !!process.pkg;
+    const ROOT_DIR = IS_COMPILED ? path.dirname(process.execPath) : __dirname;
+    const coverDir = path.join(ROOT_DIR, 'data', 'covers');
     const dest = path.join(coverDir, filename);
 
     if (!fs.existsSync(coverDir)) {

@@ -28,7 +28,17 @@ export function useGamepad(callbacks, setIsConnected) {
   useEffect(() => {
     const checkConnection = () => {
       const gps = navigator.getGamepads ? navigator.getGamepads() : [];
-      if (setIsConnected) setIsConnected(gps.some(gp => gp !== null));
+      const gp = gps.find(g => g !== null);
+      if (!gp) {
+          if (setIsConnected) setIsConnected(false);
+          return;
+      }
+      
+      // Determine Controller Type based on hardware ID
+      const gpId = (gp.id || "").toLowerCase();
+      const isPlayStation = gpId.includes('sony') || gpId.includes('dualshock') || gpId.includes('dualsense') || gpId.includes('054c') || gpId.includes('playstation');
+      
+      if (setIsConnected) setIsConnected(isPlayStation ? 'ps' : 'xbox');
     };
     
     window.addEventListener("gamepadconnected", checkConnection);

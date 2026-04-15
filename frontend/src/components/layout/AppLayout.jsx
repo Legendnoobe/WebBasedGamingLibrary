@@ -68,7 +68,9 @@ export default function AppLayout({ state, actions }) {
 
                 {layout === 'ps' && filteredGames.length > 0 && (
                     <div className="ps-bottom-bar">
-                        {(state.isGamepadConnected 
+                        {(state.isGamepadConnected === 'ps'
+                            ? [['✖', t('hints.details')], ['✖●', t('hints.play')], ['L1', t('hints.categories')], ['R1', t('hints.sorting')]]
+                            : state.isGamepadConnected === 'xbox'
                             ? [['A', t('hints.details')], ['A●', t('hints.play')], ['LB', t('hints.categories')], ['RB', t('hints.sorting')]]
                             : [['Enter', t('hints.details')], ['Enter●', t('hints.play')], ['Q', t('hints.categories')], ['E', t('hints.sorting')]]
                         ).map(([btn, lbl]) => (

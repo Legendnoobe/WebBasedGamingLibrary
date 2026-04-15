@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, 'data', 'db.json');
+const IS_COMPILED = !!process.pkg;
+const ROOT_DIR = IS_COMPILED ? path.dirname(process.execPath) : __dirname;
+const dbPath = path.join(ROOT_DIR, 'data', 'db.json');
 
 // Ensure data directory exists
-if (!fs.existsSync(path.join(__dirname, 'data'))) {
-    fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true });
+if (!fs.existsSync(path.join(ROOT_DIR, 'data'))) {
+    fs.mkdirSync(path.join(ROOT_DIR, 'data'), { recursive: true });
 }
 
 // Initial structure

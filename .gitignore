@@ -6,6 +6,13 @@ frontend/node_modules/
 # User data (not tracked — generated at runtime)
 backend/data/
 backend/covers/
+data/
+covers/
+
+# Exe Build Tools
+build-exe.bat
+*.exe
+WBGL.exe
 
 # Build output
 frontend/dist/

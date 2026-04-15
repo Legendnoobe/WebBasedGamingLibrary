@@ -12,8 +12,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+const IS_COMPILED = !!process.pkg;
+const ROOT_DIR = IS_COMPILED ? path.dirname(process.execPath) : __dirname;
+
 // Serve uploaded cover art
-const coversDir = path.join(__dirname, 'data', 'covers');
+const coversDir = path.join(ROOT_DIR, 'data', 'covers');
 if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
 app.use('/covers', express.static(coversDir));
 
@@ -25,9 +28,25 @@ app.use('/api/config',    require('./routes/config'));
 app.use('/api/steamgrid', require('./routes/sgdb'));
 app.use('/api',           require('./routes/files'));
 
+// ── Serve Frontend ────────────────────────────────────────────────────────────
+// In standalone mode, dist is bundled in the executable's virtual filesystem
+const frontendPath = path.join(__dirname, '../frontend/dist');
+if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+    // Fallback for SPA routing using regex for Express 5+ compatibility instead of '*'
+    app.get(/^.*$/, (req, res) => {
+        res.sendFile(path.join(frontendPath, 'index.html'));
+    });
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
     console.log(`Backend running on http://localhost:${PORT}`);
+
+    if (IS_COMPILED) {
+        require('child_process').exec(`start http://localhost:${PORT}`);
+        console.log(`Opening browser directly to http://localhost:${PORT}...`);
+    }
 
     // Auto-scan saved folders in background (non-blocking)
     setImmediate(async () => {
