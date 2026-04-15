@@ -66,6 +66,23 @@ export default function AppearanceTab({ uiConfig, onConfigChange, applyUiConfig,
                 </div>
             </Section>
 
+            <Section title={t('appearance.heroBrightness')}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <input
+                        type="range" min="0" max="1" step="0.05"
+                        value={uiConfig.heroBrightness ?? 0.6}
+                        onChange={e => {
+                            const v = parseFloat(e.target.value);
+                            onConfigChange('heroBrightness', v);
+                        }}
+                        style={{ flex: 1, accentColor: 'var(--accent)' }}
+                    />
+                    <span style={{ minWidth: '42px', textAlign: 'right', fontSize: '14px', fontWeight: 600 }}>
+                        {Math.round((uiConfig.heroBrightness ?? 0.6) * 100)}%
+                    </span>
+                </div>
+            </Section>
+
             <Section title={t('appearance.accentColor')}>
                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <input

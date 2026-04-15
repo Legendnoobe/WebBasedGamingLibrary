@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef } from 'react';
 
 const FADE_MS = 600;
 
-export default function HeroBackground({ src }) {
+export default function HeroBackground({ src, brightness }) {
     const [layers, setLayers] = useState([{ id: 0, src, active: true }]);
     const counterRef = useRef(1);
 
@@ -38,7 +38,7 @@ export default function HeroBackground({ src }) {
                         backgroundPosition: 'center',
                         opacity: layer.active ? 1 : 0,
                         transition: `opacity ${FADE_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
-                        filter: 'brightness(0.6)',
+                        filter: `brightness(${brightness ?? 0.6})`,
                     }}
                 />
             ))}

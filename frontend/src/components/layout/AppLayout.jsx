@@ -47,7 +47,7 @@ export default function AppLayout({ state, actions }) {
 
     return (
         <div className="app-container">
-            {layout === 'ps' && <HeroBackground src={focusedHero} />}
+            {layout === 'ps' && <HeroBackground src={focusedHero} brightness={uiConfig?.heroBrightness} />}
 
             <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)}
                 groups={groups} games={games} activeGroupId={activeGroupId}
