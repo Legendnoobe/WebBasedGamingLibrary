@@ -12,6 +12,17 @@ Web-Based Gaming Library is an elegant, entirely local, Node.js + React.js power
 
 No more messy desktop shortcuts! Map your folders, fetch stunning covers via the **SteamGridDB API**, and launch your games directly from your sofa using your **Gamepad** or Keyboard.
 
+## 📸 Screenshots / Arayüz Görüntüleri
+<div align="center">
+  <img src="screenshots/shot_1.png" width="48%" />
+  <img src="screenshots/shot_2.png" width="48%" />
+  <img src="screenshots/shot_3.png" width="48%" />
+  <img src="screenshots/shot_4.png" width="48%" />
+  <img src="screenshots/shot_5.png" width="48%" />
+  <img src="screenshots/shot_6.png" width="48%" />
+  <img src="screenshots/shot_7.png" width="98%" />
+</div>
+
 ## ✨ Key Features / Temel Özellikler
 * **🎮 Seamless Gamepad Control:** Full navigation via Xbox/PS controllers. Supports holding `A` to quick-launch, `LB/RB` for sorting/tabbing, and uses smart axis dead-zones. 
 * **📺 Smart Background Pausing:** Browsers usually continue listening to Gamepad inputs even when minimized. WBGL uses a custom `document.hasFocus()` architecture that **completely deafens** UI inputs the second you launch a game to prevent ghost navigations in the background!

@@ -37,6 +37,7 @@ export function DialogProvider({ children }) {
             {children}
             {dialog && (
                 <div
+                    className="modal-overlay"
                     style={{
                         position: 'fixed', inset: 0, zIndex: 9999,
                         background: 'var(--overlay-bg)', backdropFilter: 'blur(6px)',
