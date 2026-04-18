@@ -1,4 +1,4 @@
-##Becareful This Project Partly Use AI-Agents
+
 <div align="center">
   <br />
   <img src="frontend/public/logo.png" alt="WBGL Logo" width="120" height="auto" />
@@ -23,6 +23,10 @@ No more messy desktop shortcuts! Map your folders, fetch stunning covers via the
   <img src="screenshots/shot_6.png" width="48%" />
   <img src="screenshots/shot_7.png" width="98%" />
 </div>
+
+> ⚠️ **Warning**
+>
+> Be careful: This project partly uses AI agents.
 
 ## ✨ Key Features / Temel Özellikler
 * **🎮 Seamless Gamepad Control:** Full navigation via Xbox/PS controllers. Supports holding `A` to quick-launch, `LB/RB` for sorting/tabbing, and uses smart axis dead-zones. 
